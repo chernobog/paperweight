@@ -1,5 +1,7 @@
 export const runtime = "nodejs";
 
+const POLAR_API_VERSION = "2026-10";
+
 interface PolarValidateResponse {
   status?: string;
   expires_at?: string | null;
@@ -29,6 +31,15 @@ function asPolarValidateResponse(value: unknown): PolarValidateResponse {
   return { status, expires_at: expiresAt, customer_id: customerId };
 }
 
+function polarHeaders(apiKey: string) {
+  return {
+    Authorization: `Bearer ${apiKey}`,
+    "Content-Type": "application/json",
+    Accept: "application/json",
+    "Polar-Version": POLAR_API_VERSION,
+  };
+}
+
 async function createCustomerPortalUrl(
   polarApiKey: string,
   customerId: string,
@@ -36,11 +47,7 @@ async function createCustomerPortalUrl(
   try {
     const response = await fetch("https://api.polar.sh/v1/customer-sessions/", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${polarApiKey}`,
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
+      headers: polarHeaders(polarApiKey),
       body: JSON.stringify({ customer_id: customerId }),
     });
 
@@ -78,11 +85,7 @@ export async function POST(request: Request) {
       "https://api.polar.sh/v1/license-keys/validate",
       {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${polarApiKey}`,
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
+        headers: polarHeaders(polarApiKey),
         body: JSON.stringify({
           key: key,
           organization_id: organizationId,
