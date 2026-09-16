@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import type { PropsWithChildren } from "react";
 import { LayoutSelector } from "@/components/LayoutSelector";
 import { Providers } from "@/context";
@@ -48,6 +49,13 @@ export default function RootLayout(props: PropsWithChildren) {
 
   return (
     <html lang="en">
+      <head>
+        <Script
+          src={SITE_CONFIG.UMAMI_SCRIPT}
+          data-website-id={SITE_CONFIG.UMAMI_WEBSITE_ID}
+          data-domains={`www.${SITE_CONFIG.DOMAIN}`}
+        />
+      </head>
       <body>
         <Providers>
           <LayoutSelector
