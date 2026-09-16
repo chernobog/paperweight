@@ -10,6 +10,8 @@ export const SITE_CONFIG = {
   TAGLINE: "Manage your digital footprint",
   DOMAIN,
   URL: `https://www.${DOMAIN}`,
+  UMAMI_SCRIPT: "https://stats.westech.studio/script.js",
+  UMAMI_WEBSITE_ID: "2875508a-4c21-4fff-bf74-8043b7d91b74",
   GITHUB_URL: "https://github.com/wslyvh/paperweight",
   LICENSE_URL:
     "https://buy.polar.sh/polar_cl_OJu6ndcYoHMB8L1EePkz9dlDytnsloprg8Oh14MCNqW",
