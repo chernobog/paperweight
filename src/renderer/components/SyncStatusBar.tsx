@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { SyncStatus } from "@shared/types";
-import { isOAuthTokenError } from "./syncStatus";
+import { formatRunningSyncStatus, isOAuthTokenError } from "./syncStatus";
 
 function formatMonthYear(ts: number): string {
   return new Date(ts).toLocaleDateString("en-US", { month: "short", year: "numeric" });
@@ -32,10 +32,10 @@ export default function SyncStatusBar(): JSX.Element {
     return unsub;
   }, []);
 
-  // Tick every 30s to keep relative time fresh
-  const [, setTick] = useState(0);
+  // Tick every 30s to keep relative and elapsed times fresh
+  const [now, setNow] = useState(Date.now());
   useEffect(() => {
-    const id = setInterval(() => setTick((t) => t + 1), 30_000);
+    const id = setInterval(() => setNow(Date.now()), 30_000);
     return () => clearInterval(id);
   }, []);
 
@@ -85,21 +85,8 @@ export default function SyncStatusBar(): JSX.Element {
             <span className="text-warning">
               {analyzingMessages
                 ? "Analyzing messages…"
-                : status.phase === "historical"
-                  ? "Syncing history"
-                  : "Syncing..."}
+                : formatRunningSyncStatus(status, now)}
             </span>
-            {status.phase === "historical" && status.historicalCursor ? (
-              <span className="text-base-content/50">
-                — back to {formatMonthYear(status.historicalCursor)}
-              </span>
-            ) : status.progress > 0 ? (
-              <span className="text-base-content/50">
-                ({status.total > 0
-                  ? `~${Math.min(Math.round((status.progress / status.total) * 100), 99)}%`
-                  : `${status.progress.toLocaleString()} messages`})
-              </span>
-            ) : null}
           </>
         ) : status.error ? (
           <>

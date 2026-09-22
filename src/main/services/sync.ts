@@ -192,6 +192,11 @@ function processMessagesBatch(messages: EmailMessage[]): void {
 
 // --- Sync orchestration ---
 
+interface SyncProgress {
+  startedAt: number;
+  processed: number;
+}
+
 let currentStatus: SyncStatus = {
   running: false,
   progress: 0,
@@ -280,6 +285,7 @@ function maybeReapplyUnsubscribed(licensed: boolean): void {
 async function runIncrementalSync(
   provider: EmailProvider,
   licensed: boolean,
+  syncProgress: SyncProgress,
 ): Promise<void> {
   const syncState = getSyncState();
 
@@ -292,6 +298,7 @@ async function runIncrementalSync(
   const since = syncState.last_sync_at
     ? new Date(syncState.last_sync_at - INCREMENTAL_OVERLAP_MS)
     : new Date(Date.now() - syncDays * 86_400_000);
+  const periodEnd = syncProgress.startedAt;
 
   syncLog.info(
     `Incremental sync: since ${since.toISOString()} (${isFirstRun ? "first run" : "incremental"})`,
@@ -301,14 +308,15 @@ async function runIncrementalSync(
   let totalFetched = 0;
   let pageNum = 0;
 
-  const providerEstimate = (await provider.getMessageCount(since)) ?? 0;
-
   emitProgress({
     running: true,
-    progress: 0,
-    total: providerEstimate,
+    progress: syncProgress.processed,
+    total: 0,
     message: "Fetching messages...",
     phase: "incremental",
+    startedAt: syncProgress.startedAt,
+    periodStart: since.getTime(),
+    periodEnd,
   });
 
   // eslint-disable-next-line no-constant-condition
@@ -323,10 +331,13 @@ async function runIncrementalSync(
       (fetched) => {
         emitProgress({
           running: true,
-          progress: totalFetched + fetched,
-          total: Math.max(providerEstimate, totalFetched + fetched),
+          progress: syncProgress.processed + fetched,
+          total: 0,
           message: "Fetching messages...",
           phase: "incremental",
+          startedAt: syncProgress.startedAt,
+          periodStart: since.getTime(),
+          periodEnd,
         });
       },
     );
@@ -338,13 +349,17 @@ async function runIncrementalSync(
     if (result.messages.length > 0) {
       processMessagesBatch(result.messages);
       totalFetched += result.messages.length;
+      syncProgress.processed += result.messages.length;
 
       emitProgress({
         running: true,
-        progress: totalFetched,
-        total: Math.max(providerEstimate, totalFetched),
+        progress: syncProgress.processed,
+        total: 0,
         message: "Updating vendor data...",
         phase: "incremental",
+        startedAt: syncProgress.startedAt,
+        periodStart: since.getTime(),
+        periodEnd,
       });
     }
 
@@ -388,6 +403,7 @@ async function runIncrementalSync(
 
 async function runHistoricalChunk(
   provider: EmailProvider,
+  syncProgress: SyncProgress,
 ): Promise<{ hasMore: boolean; count: number }> {
   const syncState = getSyncState();
 
@@ -416,14 +432,15 @@ async function runHistoricalChunk(
   );
   const chunkStart = Date.now();
 
-  const chunkEstimate = (await provider.getMessageCount(since, until)) ?? 0;
-
   emitProgress({
     running: true,
-    progress: 0,
-    total: chunkEstimate,
+    progress: syncProgress.processed,
+    total: 0,
     message: "Syncing history",
     phase: "historical",
+    startedAt: syncProgress.startedAt,
+    periodStart: since.getTime(),
+    periodEnd: until.getTime(),
     historicalCursor: since.getTime(),
   });
 
@@ -439,10 +456,13 @@ async function runHistoricalChunk(
       (fetched) => {
         emitProgress({
           running: true,
-          progress: totalFetched + fetched,
-          total: Math.max(chunkEstimate, totalFetched + fetched),
+          progress: syncProgress.processed + fetched,
+          total: 0,
           message: "Syncing history",
           phase: "historical",
+          startedAt: syncProgress.startedAt,
+          periodStart: since.getTime(),
+          periodEnd: until.getTime(),
           historicalCursor: since.getTime(),
         });
       },
@@ -451,6 +471,7 @@ async function runHistoricalChunk(
     if (result.messages.length > 0) {
       processMessagesBatch(result.messages);
       totalFetched += result.messages.length;
+      syncProgress.processed += result.messages.length;
     }
 
     if (result.nextPageToken) {
@@ -497,29 +518,36 @@ export async function runSync(licensedOverride?: boolean): Promise<void> {
     knownValues.length > 0 ? { knownValues } : undefined,
   );
 
+  const startTime = Date.now();
+  const syncProgress: SyncProgress = { startedAt: startTime, processed: 0 };
+
   emitProgress({
     running: true,
     progress: 0,
     total: 0,
     message: "Connecting...",
     phase: "incremental",
+    startedAt: startTime,
   });
 
-  const startTime = Date.now();
   try {
     // Phase 0: convert a pre-switch database to the engine's vocabulary. Local
     // data only, so it runs before we connect — an offline launch still gets a
     // converged dataset, and no freshly-synced row exists yet for it to
     // re-derive down to a header-only verdict. A no-op after the first run.
-    await runReclassifyPass((done, total) => {
+    let reclassified = 0;
+    await runReclassifyPass((done) => {
+      reclassified = done;
       emitProgress({
         running: true,
-        progress: done,
-        total,
+        progress: syncProgress.processed + done,
+        total: 0,
         message: "Updating your mail",
         phase: "incremental",
+        startedAt: startTime,
       });
     });
+    syncProgress.processed += reclassified;
 
     const connection = await provider.connect();
     syncLog.info(`Provider connected (${connection.type})`);
@@ -535,7 +563,7 @@ export async function runSync(licensedOverride?: boolean): Promise<void> {
     }
 
     // Phase 1: Incremental sync (always runs — window is 90d free / 365d licensed on first run)
-    await runIncrementalSync(provider, licensed);
+    await runIncrementalSync(provider, licensed, syncProgress);
 
     // Phase 1.5: Apply removals (deletions / moves out of the tracked folder) for
     // providers with a delta layer (Gmail, Microsoft). No-op for IMAP.
@@ -556,7 +584,7 @@ export async function runSync(licensedOverride?: boolean): Promise<void> {
         let historicalChunks = 0;
         let emptyChunks = 0;
         while (hasMore) {
-          const result = await runHistoricalChunk(provider);
+          const result = await runHistoricalChunk(provider, syncProgress);
           hasMore = result.hasMore;
           historicalMessages += result.count;
           historicalChunks++;

@@ -599,6 +599,9 @@ export interface SyncStatus {
   progress: number;
   total: number;
   message: string;
+  startedAt?: number;
+  periodStart?: number;
+  periodEnd?: number;
   analysisPending?: boolean;
   error?: string;
   lastSyncAt?: number;
