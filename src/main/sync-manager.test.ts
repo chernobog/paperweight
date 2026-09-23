@@ -76,10 +76,6 @@ jest.mock("./services/analysis", () => ({
   needsAnalysisPass: mockNeedsAnalysisPass,
 }));
 
-jest.mock("./services/settings", () => ({
-  getLicenseStatus: () => ({ active: true }),
-}));
-
 jest.mock("./utils/log", () => {
   const logger = {
     debug: jest.fn(),
@@ -147,6 +143,16 @@ describe("Refresh analysis scheduling", () => {
     });
   });
 
+  it("syncs every saved mailbox without a license", () => {
+    mockAccounts.push({ email: "second@example.com", providerType: "gmail" });
+    startAllSyncs();
+    expect(mockWorkerInstances).toHaveLength(2);
+    expect(mockWorkerInstances.map((worker) => worker.workerData.dbPath)).toEqual([
+      dbPath("person@example.com"),
+      dbPath("second@example.com"),
+    ]);
+  });
+
   afterEach(async () => {
     await stopAllSyncs();
   });
@@ -172,7 +178,6 @@ describe("Refresh analysis scheduling", () => {
     expect(mockWorkerInstances[1].workerData).toMatchObject({
       mode: "profile-analysis",
       credentials: null,
-      licensed: false,
     });
     expect(getSyncStatus().message).toBe("Analyzing messages");
 

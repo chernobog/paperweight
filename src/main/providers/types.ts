@@ -41,15 +41,12 @@ export interface EmailProvider {
   disconnect(): Promise<void>;
   isAuthenticated(): boolean;
 
-  // Read operations
-  getMessageCount(since: Date, until?: Date): Promise<number | undefined>;
   listMessages(
     since: Date,
     until?: Date,
     pageToken?: string,
     onProgress?: (fetched: number, estimatedTotal?: number) => void
   ): Promise<{ messages: EmailMessage[]; nextPageToken?: string }>;
-  getMessage(messageId: string): Promise<EmailMessage>;
 
   // Removal tracking (optional). Adds always come from date-range listMessages();
   // this is a removal-only delta layer (Gmail History API, Microsoft inbox delta).

@@ -1,3 +1,4 @@
+import { handle } from "./access";
 import { ipcMain, shell } from "electron";
 import { IPC } from "@shared/ipc";
 import { isLicenseKey, isString } from "@shared/validation";
@@ -7,23 +8,27 @@ import {
   deleteLicense,
   getLicenseStatus,
   getMcpSetup,
+  requirePro,
 } from "../services/settings";
 import { saveSetting } from "../services/settings";
 import { getGlobalSetting, saveGlobalSetting } from "../services/globalSettings";
 import { buildAppSettings } from "../services/appSettings";
+import { startAllSyncs } from "../sync-manager";
 import { dataLog } from "../utils/log";
 
 export function registerSettingsHandlers(): void {
   // --- License ---
 
-  ipcMain.handle(IPC.activateLicense, async (_event, key: unknown) => {
+  handle(IPC.activateLicense, async (_event, key: unknown) => {
     if (!isLicenseKey(key)) throw new Error("Invalid license key");
-    return activateLicense(key);
+    const status = await activateLicense(key);
+    if (status.active) startAllSyncs();
+    return status;
   });
 
-  ipcMain.handle(IPC.getLicenseStatus, () => getLicenseStatus());
+  handle(IPC.getLicenseStatus, () => getLicenseStatus());
 
-  ipcMain.handle(IPC.deactivateLicense, () => {
+  handle(IPC.deactivateLicense, () => {
     deleteLicense();
   });
 
@@ -33,7 +38,7 @@ export function registerSettingsHandlers(): void {
     event.returnValue = buildAppSettings();
   });
 
-  ipcMain.handle(IPC.saveSettings, (_event, settings: unknown) => {
+  handle(IPC.saveSettings, (_event, settings: unknown) => {
     if (!settings || typeof settings !== "object") {
       throw new Error("Invalid settings");
     }
@@ -77,6 +82,7 @@ export function registerSettingsHandlers(): void {
     }
 
     if (s.agentAccess !== undefined) {
+      if (s.agentAccess !== "off") requirePro();
       if (
         s.agentAccess !== "off"
         && s.agentAccess !== "read"
@@ -123,11 +129,19 @@ export function registerSettingsHandlers(): void {
     }
   });
 
-  ipcMain.handle(IPC.getMcpSetup, () => getMcpSetup());
+  handle(IPC.getMcpSetup, () => getMcpSetup());
+
+  handle(IPC.openUnsubscribeUrl, async (_event, url: unknown) => {
+    requirePro();
+    if (!isString(url)) throw new Error("Invalid unsubscribe URL");
+    const parsed = new URL(url);
+    if (!["https:", "http:"].includes(parsed.protocol)) throw new Error("Invalid unsubscribe URL");
+    await shell.openExternal(url);
+  });
 
   // --- Shell ---
 
-  ipcMain.handle(IPC.openExternal, (_event, url: unknown) => {
+  handle(IPC.openExternal, (_event, url: unknown) => {
     if (!isString(url) || url.trim() === "") return;
 
     try {

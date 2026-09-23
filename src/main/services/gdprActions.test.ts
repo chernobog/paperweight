@@ -5,7 +5,7 @@ jest.mock("./cases", () => ({
   queryGdprCases: jest.fn(() => []),
 }));
 jest.mock("./email", () => ({ sendEmail: jest.fn() }));
-jest.mock("./settings", () => ({ getSetting: jest.fn(() => "Test User") }));
+jest.mock("./settings", () => ({ requirePro: jest.fn(), getSetting: jest.fn(() => "Test User") }));
 jest.mock("./vendors", () => ({
   getVendorDetail: jest.fn(),
   updateVendor: jest.fn(),
@@ -55,7 +55,7 @@ describe("sendPrivacyRequest", () => {
       undefined,
       undefined,
       approve,
-    )).resolves.toEqual({ status: "sent", caseId: 12 });
+    )).resolves.toEqual({ status: "sent", caseId: 12, messageId: "sent-id" });
 
     expect(update).toHaveBeenCalledWith(7, { account_email: "alias@example.test" });
     expect(approve).toHaveBeenCalledWith({
@@ -74,6 +74,83 @@ describe("sendPrivacyRequest", () => {
       recipientEmail: "privacy@example.nl",
       sentMessageId: "sent-id",
     }));
+  });
+
+  it("returns sent_case_failed with the message id and records without sending again", async () => {
+    getDetail.mockReturnValue({
+      vendor: { id: 7, root_domain: "example.nl" },
+      company: { email: "privacy@example.nl" },
+      senders: [],
+      receivedAddresses: [],
+    } as never);
+    send.mockResolvedValue({ success: true, messageId: "sent-id" });
+    createCase.mockImplementationOnce(() => { throw new Error("disk full"); });
+    createCase.mockReturnValue({ id: 12 } as never);
+
+    await expect(sendPrivacyRequest(
+      7,
+      "example.nl",
+      "access",
+      "mailbox@example.test",
+      undefined,
+      undefined,
+      undefined,
+      approve,
+    )).resolves.toEqual({ status: "sent_case_failed", messageId: "sent-id" });
+    expect(send).toHaveBeenCalledTimes(1);
+
+    await expect(sendPrivacyRequest(
+      7,
+      "example.nl",
+      "access",
+      "mailbox@example.test",
+      undefined,
+      undefined,
+      undefined,
+      approve,
+      "sent-id",
+    )).resolves.toEqual({ status: "sent", caseId: 12, messageId: "sent-id" });
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(approve).toHaveBeenCalledTimes(1);
+  });
+
+  it("records without sending again when the provider omitted a message id", async () => {
+    getDetail.mockReturnValue({
+      vendor: { id: 7, root_domain: "example.nl" },
+      company: { email: "privacy@example.nl" },
+      senders: [],
+      receivedAddresses: [],
+    } as never);
+    send.mockResolvedValue({ success: true });
+    createCase.mockImplementationOnce(() => { throw new Error("disk full"); });
+    createCase.mockReturnValue({ id: 12 } as never);
+
+    await expect(sendPrivacyRequest(
+      7,
+      "example.nl",
+      "access",
+      "mailbox@example.test",
+      undefined,
+      undefined,
+      undefined,
+      approve,
+    )).resolves.toEqual({ status: "sent_case_failed" });
+    expect(send).toHaveBeenCalledTimes(1);
+
+    await expect(sendPrivacyRequest(
+      7,
+      "example.nl",
+      "access",
+      "mailbox@example.test",
+      undefined,
+      undefined,
+      undefined,
+      approve,
+      undefined,
+      true,
+    )).resolves.toEqual({ status: "sent", caseId: 12 });
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(approve).toHaveBeenCalledTimes(1);
   });
 
   it("does not send when only a no-reply address is available", async () => {
@@ -238,4 +315,54 @@ describe("sendCaseMessage", () => {
       .resolves.toEqual({ status: "not_available" });
     expect(send).not.toHaveBeenCalled();
   });
+
+  it("returns sent_event_failed with the message id and records without sending again", async () => {
+    getCase.mockReturnValue({
+      id: 4,
+      status: "active",
+      nextAction: "reminder",
+      recipientEmail: "privacy@example.test",
+      requestType: "deletion",
+      openedAt: 1_700_000_000_000,
+      accountEmail: "account@example.test",
+      vendorName: "Example",
+      vendorDomain: "example.test",
+      sentMessageId: "original-id",
+      events: [{ actionType: "gdpr_request_sent", subject: "Delete my data" }],
+    } as never);
+    send.mockResolvedValue({ success: true, messageId: "follow-id" });
+    addEvent.mockImplementationOnce(() => { throw new Error("disk full"); });
+
+    await expect(sendCaseMessage(4, "reminder", "mailbox@example.test", approve))
+      .resolves.toEqual({ status: "sent_event_failed", messageId: "follow-id" });
+    expect(send).toHaveBeenCalledTimes(1);
+
+    await expect(sendCaseMessage(
+      4,
+      "reminder",
+      "mailbox@example.test",
+      approve,
+      true,
+      "follow-id",
+    )).resolves.toEqual({ status: "sent", messageId: "follow-id" });
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(approve).toHaveBeenCalledTimes(1);
+    expect(addEvent).toHaveBeenCalledWith(
+      4,
+      "reminder_sent",
+      expect.objectContaining({ messageId: "follow-id" }),
+    );
+  });
+});
+
+
+it("blocks Free privacy requests before approval, sending, or local changes", async () => {
+  const { requirePro } = await import("./settings");
+  jest.mocked(requirePro).mockImplementationOnce(() => { throw new Error("Pro required"); });
+  await expect(sendPrivacyRequest(7, "example.nl", "access", "mailbox@example.test", undefined, undefined, undefined, approve))
+    .rejects.toThrow("Pro required");
+  expect(approve).not.toHaveBeenCalled();
+  expect(send).not.toHaveBeenCalled();
+  expect(update).not.toHaveBeenCalled();
+  expect(createCase).not.toHaveBeenCalled();
 });

@@ -36,7 +36,7 @@ function insertVendor(rootDomain: string): number {
 }
 
 beforeAll(() => {
-  initDb(":memory:", "/nonexistent", "/nonexistent", "/nonexistent");
+  initDb(":memory:", "/nonexistent", "/nonexistent");
 });
 
 describe("createGdprCase / getGdprCaseById", () => {

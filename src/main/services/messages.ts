@@ -4,15 +4,6 @@ import { BODY_PREVIEW_LENGTH } from "@shared/types";
 import type { EmailMessage } from "../providers/types";
 import { actionableListMailSql } from "./messageVocabulary";
 
-function stripQueryParams(url: string): string {
-  try {
-    const u = new URL(url);
-    return `${u.origin}${u.pathname}`;
-  } catch {
-    return url;
-  }
-}
-
 export function insertActionLog(
   vendorId: number,
   actionType: "unsubscribed" | "trashed" | "spam_reported",
@@ -29,7 +20,7 @@ export function insertActionLog(
     vendorId,
     actionType,
     senderEmail ?? null,
-    unsubscribeUrl ? stripQueryParams(unsubscribeUrl) : null,
+    unsubscribeUrl ?? null,
     messageCount,
     sizeBytes,
     Date.now()
@@ -139,13 +130,6 @@ export function insertMessageVendor(
   return result.changes > 0;
 }
 
-export function getMessagesByEmail(email: string, limit: number): Message[] {
-  const d = getDb();
-  return d
-    .prepare(`SELECT ${MESSAGE_COLUMNS} FROM messages WHERE sender_email = ? ORDER BY date DESC LIMIT ?`)
-    .all(email, limit) as Message[];
-}
-
 export function getMessagesByVendor(vendorId: number, limit: number): Message[] {
   const d = getDb();
   return d
@@ -153,28 +137,33 @@ export function getMessagesByVendor(vendorId: number, limit: number): Message[] 
     .all(vendorId, limit) as Message[];
 }
 
-export function markUnsubscribed(email: string): void {
-  const d = getDb();
-  d.prepare(
-    `UPDATE messages SET status = 'unsubscribed'
-     WHERE sender_email = ? AND unsubscribe_url IS NOT NULL`
-  ).run(email);
-}
-
-// Re-derive per-message "unsubscribed" status from the durable action_log. Used after the
-// all-mail migration cleared messages (IMAP/Microsoft): vendors and action_log survive the
-// wipe, so we re-apply the vendor-wide unsubscribed flag to the re-synced messages.
-// Vendor-keyed — no dependency on old message IDs. Idempotent.
+// Re-derive per-message "unsubscribed" status from the durable action_log after
+// messages are rebuilt. List actions restore only their URL; vendor-wide actions
+// (null URL) restore every list for that vendor. Idempotent.
 export function reapplyUnsubscribedFromActionLog(): void {
   const d = getDb();
-  d.prepare(
+  const rows = d.prepare(
+    `SELECT vendor_id, unsubscribe_url FROM action_log WHERE action_type = 'unsubscribed'`
+  ).all() as { vendor_id: number; unsubscribe_url: string | null }[];
+  const vendorWide = new Set<number>();
+  const listTargets: { vendor_id: number; unsubscribe_url: string }[] = [];
+  for (const row of rows) {
+    if (row.unsubscribe_url) listTargets.push({ vendor_id: row.vendor_id, unsubscribe_url: row.unsubscribe_url });
+    else vendorWide.add(row.vendor_id);
+  }
+  const markVendor = d.prepare(
     `UPDATE messages SET status = 'unsubscribed'
-     WHERE unsubscribe_url IS NOT NULL
-       AND status IS NULL
-       AND vendor_id IN (
-         SELECT DISTINCT vendor_id FROM action_log WHERE action_type = 'unsubscribed'
-       )`
-  ).run();
+     WHERE vendor_id = ? AND unsubscribe_url IS NOT NULL AND status IS NULL`
+  );
+  for (const vendorId of vendorWide) markVendor.run(vendorId);
+  const markList = d.prepare(
+    `UPDATE messages SET status = 'unsubscribed'
+     WHERE vendor_id = ? AND unsubscribe_url = ? AND status IS NULL`
+  );
+  for (const target of listTargets) {
+    if (vendorWide.has(target.vendor_id)) continue;
+    markList.run(target.vendor_id, target.unsubscribe_url);
+  }
 }
 
 export function getMessageById(id: string): Message | undefined {
@@ -217,8 +206,23 @@ export function markVendorUnsubscribed(vendorId: number): void {
      WHERE vendor_id = ? AND unsubscribe_url IS NOT NULL`
   ).run(vendorId);
   if (rows.count > 0) {
-    insertActionLog(vendorId, "unsubscribed", rows.count, rows.total_size);
+    insertActionLog(vendorId, "unsubscribed", rows.count, 0);
   }
+}
+
+export function markListUnsubscribed(vendorId: number, url: string): void {
+  const d = getDb();
+  const rows = d.prepare(
+    `SELECT COUNT(*) as count FROM messages
+     WHERE vendor_id = ? AND unsubscribe_url = ?
+       AND (status IS NULL OR status != 'unsubscribed')`
+  ).get(vendorId, url) as { count: number };
+  if (rows.count === 0) return;
+  d.prepare(
+    `UPDATE messages SET status = 'unsubscribed'
+     WHERE vendor_id = ? AND unsubscribe_url = ? AND (status IS NULL OR status != 'unsubscribed')`
+  ).run(vendorId, url);
+  insertActionLog(vendorId, "unsubscribed", rows.count, 0, undefined, url);
 }
 
 export function deleteVendorMessages(vendorId: number, types?: MessageType[]): { count: number; sizeBytes: number } {
@@ -247,17 +251,24 @@ export function getMessageIdsByVendor(vendorId: number, types?: MessageType[]): 
 
 export function getAllUnsubscribeMethodsForVendor(vendorId: number): UnsubscribeEntry[] {
   const d = getDb();
-  // One entry per distinct method; picks the most recently seen URL for that method.
   const rows = d
     .prepare(
-      `SELECT unsubscribe_method AS method, unsubscribe_url AS url, sender_email AS senderEmail
+      `SELECT unsubscribe_method AS method, unsubscribe_url AS url, sender_email AS senderEmail, date
        FROM messages
        WHERE vendor_id = ?
          AND ${actionableListMailSql()}
          AND (status IS NULL OR status NOT IN ('unsubscribed'))
-       GROUP BY unsubscribe_method
+         AND unsubscribe_url IS NOT NULL
        ORDER BY date DESC`
     )
-    .all(vendorId) as UnsubscribeEntry[];
-  return rows;
+    .all(vendorId) as Array<UnsubscribeEntry & { date: number }>;
+  const seen = new Set<string>();
+  const result: UnsubscribeEntry[] = [];
+  for (const row of rows) {
+    const key = row.url;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push({ method: row.method, url: row.url, senderEmail: row.senderEmail });
+  }
+  return result;
 }

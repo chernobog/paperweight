@@ -1,3 +1,4 @@
+import { useActionAccess } from "../context/LicenseContext";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import type {
@@ -22,6 +23,7 @@ import { ArrowLeft, ChevronDown, ExternalLink } from "lucide-react";
 import ActionModal from "../components/ActionModal";
 import { canAccountSend } from "../utils/account";
 import { errText } from "../utils/errText";
+import { isCaseMessageRecovery, type CaseMessageRecovery } from "../utils/gdprSendRecovery";
 import {
   ACTION_COLORS,
   ACTION_LABELS,
@@ -303,6 +305,7 @@ function Timeline({
 }
 
 export default function CaseDetail(): JSX.Element {
+  const allowAction = useActionAccess();
   const { caseId } = useParams<{ caseId: string }>();
   const navigate = useNavigate();
   const id = Number(caseId);
@@ -320,6 +323,7 @@ export default function CaseDetail(): JSX.Element {
   const [userName, setUserName] = useState("");
   const [canSend, setCanSend] = useState(true);
   const [sendAction, setSendAction] = useState<"reminder" | "followup" | null>(null);
+  const [pendingCaseRecord, setPendingCaseRecord] = useState<CaseMessageRecovery>();
   const [closeOpen, setCloseOpen] = useState(false);
   const [alsoRequestDeletion, setAlsoRequestDeletion] = useState(false);
   const [escalateOpen, setEscalateOpen] = useState(false);
@@ -339,6 +343,9 @@ export default function CaseDetail(): JSX.Element {
 
   useEffect(() => {
     setLoading(true);
+    setPendingCaseRecord(undefined);
+    setSendAction(null);
+    setModalError(undefined);
     Promise.all([refresh(), window.api.getAccountInfo(), Promise.resolve(window.api.getSettings())])
       .then(([, info, settings]) => {
         setAccountEmail(info.email);
@@ -347,7 +354,7 @@ export default function CaseDetail(): JSX.Element {
         // Fire-and-forget: clears the unseen-reply state for next time, after
         // this render already used the pre-view lastViewedAt to highlight it.
         // Notify the shell so the nav badge re-queries with the updated count.
-        if (id) {
+        if (id && window.api.listAccounts().some((account) => account.isActive)) {
           window.api.markGdprCaseViewed(id).then(() => {
             window.dispatchEvent(new CustomEvent("case-viewed"));
           });
@@ -400,6 +407,7 @@ export default function CaseDetail(): JSX.Element {
   const requestEvent = [...events].reverse().find((e) => e.actionType === "gdpr_request_sent");
 
   const handleToggleLink = async (messageId: string, linked: boolean): Promise<void> => {
+    if (!allowAction("curate")) return;
     setLinkLoading(true);
     setFlash(null);
     try {
@@ -433,40 +441,40 @@ export default function CaseDetail(): JSX.Element {
   const pendingEmail = sendAction ? buildActionEmail(sendAction) : null;
 
   const handleSend = async (): Promise<void> => {
+    if (!allowAction("execute")) return;
     if (!sendAction || !caseDetail.recipientEmail || !pendingEmail) return;
+    const recovering = isCaseMessageRecovery(pendingCaseRecord, id, sendAction);
     setActionLoading(true);
     setModalError(undefined);
     try {
-      const result = await window.api.sendEmail(
-        caseDetail.recipientEmail,
-        pendingEmail.subject,
-        pendingEmail.body,
-        caseDetail.sentMessageId,
+      const result = await window.api.sendCaseMessage(
+        id,
+        sendAction,
+        recovering,
+        recovering ? pendingCaseRecord.messageId : undefined,
       );
-      if (!result.success) {
-        setModalError(result.error ?? "Could not send the email.");
+      if (result.status === "failed") {
+        setModalError("Could not send the email.");
         return;
       }
-      // The email is already out. If recording it fails, say so explicitly and
-      // stop — never silently succeed (the user would resend and double-mail
-      // the company).
-      try {
-        await window.api.addGdprCaseEvent(
-          id,
-          sendAction === "reminder" ? "reminder_sent" : "followup_sent",
-          { subject: pendingEmail.subject, body: pendingEmail.body },
-        );
-      } catch (err) {
+      if (result.status === "sent_event_failed") {
+        setPendingCaseRecord({
+          caseId: id,
+          action: sendAction,
+          messageId: result.messageId,
+        });
         setModalError(
-          errText(
-            err,
-            "The email was sent, but recording it on the case failed. Don't resend — reload the case to check.",
-          ),
+          "The email was sent, but recording it on the case failed. Don't resend.",
         );
+        return;
+      }
+      if (result.status !== "sent") {
+        setModalError("Could not send the email.");
         return;
       }
       const label = sendAction === "reminder" ? "Reminder sent" : "Follow-up sent";
       setSendAction(null);
+      setPendingCaseRecord(undefined);
       await refresh();
       setFlash({ type: "success", text: label });
     } catch (err) {
@@ -477,6 +485,7 @@ export default function CaseDetail(): JSX.Element {
   };
 
   const handleClose = async (): Promise<void> => {
+    if (!allowAction("curate")) return;
     setActionLoading(true);
     setModalError(undefined);
     try {
@@ -496,6 +505,7 @@ export default function CaseDetail(): JSX.Element {
   };
 
   const handleReopen = async (): Promise<void> => {
+    if (!allowAction("curate")) return;
     setActionLoading(true);
     setFlash(null);
     try {
@@ -510,6 +520,7 @@ export default function CaseDetail(): JSX.Element {
   };
 
   const handleEscalate = async (): Promise<void> => {
+    if (!allowAction("curate")) return;
     setActionLoading(true);
     setModalError(undefined);
     try {
@@ -627,7 +638,11 @@ export default function CaseDetail(): JSX.Element {
                 <button
                   className="btn btn-primary btn-sm shrink-0"
                   disabled={!caseDetail.recipientEmail || actionLoading || !canSend}
-                  onClick={() => { setModalError(undefined); setSendAction("reminder"); }}
+                  onClick={() => {
+                    if (!allowAction("execute")) return;
+                    setModalError(undefined);
+                    setSendAction("reminder");
+                  }}
                 >
                   Send reminder
                 </button>
@@ -642,7 +657,11 @@ export default function CaseDetail(): JSX.Element {
                 <button
                   className="btn btn-primary btn-sm shrink-0"
                   disabled={!caseDetail.recipientEmail || actionLoading || !canSend}
-                  onClick={() => { setModalError(undefined); setSendAction("followup"); }}
+                  onClick={() => {
+                    if (!allowAction("execute")) return;
+                    setModalError(undefined);
+                    setSendAction("followup");
+                  }}
                 >
                   Send follow-up
                 </button>
@@ -705,23 +724,31 @@ export default function CaseDetail(): JSX.Element {
       {sendAction && (
         <ActionModal
           isOpen
-          title={sendAction === "reminder" ? "Send reminder" : "Send follow-up"}
-          confirmLabel="Send"
+          title={isCaseMessageRecovery(pendingCaseRecord, id, sendAction)
+            ? (sendAction === "reminder" ? "Record reminder" : "Record follow-up")
+            : (sendAction === "reminder" ? "Send reminder" : "Send follow-up")}
+          confirmLabel={isCaseMessageRecovery(pendingCaseRecord, id, sendAction) ? "Record on case" : "Send"}
           confirmVariant="primary"
           copyText={pendingEmail?.body}
           onConfirm={handleSend}
-          onCancel={() => { if (!actionLoading) setSendAction(null); }}
+          onCancel={() => { if (!actionLoading) { setSendAction(null); } }}
           loading={actionLoading}
           error={modalError}
         >
           <p>
+            {isCaseMessageRecovery(pendingCaseRecord, id, sendAction)
+              ? <>The email was sent to <strong>{caseDetail.recipientEmail}</strong>. Recording it on the case failed — retry recording only, don't send again.</>
+              : <>
             Before sending, check your inbox for a response — we try to match related
             messages, but companies sometimes reply from a different address.
+              </>}
           </p>
+          {!isCaseMessageRecovery(pendingCaseRecord, id, sendAction) && (
           <p>
             Paperweight will send this from your account to{" "}
             <strong>{caseDetail.recipientEmail}</strong>, as a reply to your original request:
           </p>
+          )}
           <pre className="whitespace-pre-wrap text-sm text-base-content/70 bg-base-100 rounded-lg p-3 max-h-64 overflow-y-auto">
             {pendingEmail?.body}
           </pre>

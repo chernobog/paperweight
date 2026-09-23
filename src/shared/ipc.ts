@@ -11,12 +11,15 @@ import type {
   GdprCaseStatus,
   GdprCaseSummary,
   GdprCaseReplies,
+  GdprRequestType,
   DashboardStats,
   ChartTrend,
   EmailConnection,
   ImapConfig,
   ImpactStats,
   LicenseStatus,
+  PrivacyRequestResult,
+  CaseMessageResult,
   Message,
   MessageType,
   McpSetup,
@@ -47,7 +50,6 @@ export const IPC = {
   startMicrosoftAuth: "start-microsoft-auth",
   saveImapConfig: "save-imap-config",
   updateServerConfig: "update-server-config",
-  testConnection: "test-connection",
   getAccountInfo: "get-account-info",
   startSync: "start-sync",
   getSyncStatus: "get-sync-status",
@@ -63,14 +65,13 @@ export const IPC = {
   openExternal: "open-external",
   authUrl: "auth-url",
   syncProgress: "sync-progress",
-  markUnsubscribed: "mark-unsubscribed",
   markVendorUnsubscribed: "mark-vendor-unsubscribed",
+  markListUnsubscribed: "mark-list-unsubscribed",
   markVendorReviewed: "mark-vendor-reviewed",
   setVendorAccountEmail: "set-vendor-account-email",
   addWhitelistEntry: "add-whitelist-entry",
   removeWhitelistEntry: "remove-whitelist-entry",
   getWhitelistEntries: "get-whitelist-entries",
-  getMessagesByEmail: "get-messages-by-email",
   getVendorMessages: "get-vendor-messages",
   trashMessage: "trash-message",
   markMessageAsSpam: "mark-message-as-spam",
@@ -83,7 +84,6 @@ export const IPC = {
   getStorageBreakdown: "get-storage-breakdown",
   readLogFile: "read-log-file",
   getVendorDetail: "get-vendor-detail",
-  deleteVendor: "delete-vendor",
   getAllUnsubscribeMethods: "get-all-unsubscribe-methods",
   executeRfc8058: "execute-rfc8058",
   trashVendorMessages: "trash-vendor-messages",
@@ -94,11 +94,14 @@ export const IPC = {
   listAccounts: "list-accounts",
   addAccount: "add-account",
   switchAccount: "switch-account",
+  openUnsubscribeUrl: "open-unsubscribe-url",
   removeAccount: "remove-account",
   accountSwitched: "account-switched",
   updateDownloaded: "update-downloaded",
   installUpdate: "install-update",
   sendEmail: "send-email",
+  sendPrivacyRequest: "send-privacy-request",
+  sendCaseMessage: "send-case-message",
   createGdprCase: "create-gdpr-case",
   getGdprCase: "get-gdpr-case",
   queryGdprCases: "query-gdpr-cases",
@@ -146,7 +149,6 @@ export interface ElectronAPI {
   updateServerConfig: (
     server: ServerConfig & { smtp: NonNullable<ServerConfig["smtp"]> },
   ) => Promise<{ success: boolean; error?: string }>;
-  testConnection: () => Promise<{ success: boolean; error?: string }>;
   getAccountInfo: () => Promise<AccountInfo>;
   startSync: () => Promise<void>;
   getSyncStatus: () => Promise<SyncStatus>;
@@ -161,14 +163,13 @@ export interface ElectronAPI {
   openExternal: (url: string) => Promise<void>;
   onAuthUrl: (callback: (url: string) => void) => () => void;
   onSyncProgress: (callback: (status: SyncStatus) => void) => () => void;
-  markUnsubscribed: (email: string) => Promise<void>;
   markVendorUnsubscribed: (vendorId: number) => Promise<void>;
+  markListUnsubscribed: (vendorId: number, url: string) => Promise<void>;
   markVendorReviewed: (vendorId: number, reviewed?: boolean) => Promise<void>;
   setVendorAccountEmail: (vendorId: number, email: string) => Promise<void>;
   addWhitelistEntry: (value: string) => Promise<void>;
   removeWhitelistEntry: (value: string) => Promise<void>;
   getWhitelistEntries: () => Promise<WhitelistEntry[]>;
-  getMessagesByEmail: (email: string, limit: number) => Promise<Message[]>;
   getVendorMessages: (vendorId: number, limit: number) => Promise<Message[]>;
   trashMessage: (messageId: string) => Promise<void>;
   markMessageAsSpam: (messageId: string) => Promise<void>;
@@ -181,7 +182,6 @@ export interface ElectronAPI {
   getStorageBreakdown: () => Promise<StorageBreakdown>;
   readLogFile: () => Promise<string>;
   getVendorDetail: (groupKey: string) => Promise<VendorDetail>;
-  deleteVendor: (vendorId: number) => Promise<void>;
   getAllUnsubscribeMethods: (vendorId: number) => Promise<UnsubscribeEntry[]>;
   executeRfc8058: (url: string) => Promise<{ success: boolean; error?: string }>;
   trashVendorMessages: (vendorId: number, types?: MessageType[]) => Promise<{ success: boolean; error?: string }>;
@@ -192,6 +192,7 @@ export interface ElectronAPI {
   listAccounts: () => AccountSummary[];
   addAccount: () => Promise<{ blocked: true; reason: "license_required" } | null>;
   switchAccount: (email: string) => Promise<void>;
+  openUnsubscribeUrl: (url: string) => Promise<void>;
   removeAccount: (email: string) => Promise<void>;
   onAccountSwitched: (callback: (email: string) => void) => () => void;
   onNoAccountsRemaining: (callback: () => void) => () => void;
@@ -203,6 +204,22 @@ export interface ElectronAPI {
     body: string,
     inReplyTo?: string,
   ) => Promise<{ success: boolean; error?: string; messageId?: string }>;
+  sendPrivacyRequest: (
+    vendorId: number,
+    companyKey: string,
+    requestType: GdprRequestType,
+    recipientOverride?: string,
+    accountIdentifier?: string,
+    languageOverride?: string,
+    sentMessageId?: string,
+    recordOnly?: boolean,
+  ) => Promise<PrivacyRequestResult>;
+  sendCaseMessage: (
+    caseId: number,
+    action: "reminder" | "followup",
+    recordOnly?: boolean,
+    sentMessageId?: string,
+  ) => Promise<CaseMessageResult>;
   createGdprCase: (input: CreateGdprCaseInput) => Promise<GdprCase>;
   getGdprCase: (id: number) => Promise<GdprCaseDetail | undefined>;
   queryGdprCases: (filter?: { status?: GdprCaseStatus; vendorId?: number }) => Promise<GdprCaseSummary[]>;

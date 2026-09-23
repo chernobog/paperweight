@@ -93,8 +93,11 @@ export default function AppShell(): JSX.Element {
   const handleSwitch = async (email: string) => {
     setDropdownOpen(false);
     if (activeAccount && email !== activeAccount.email) {
-      await window.api.switchAccount(email);
-      // App.tsx onAccountSwitched handler navigates to /dashboard and remounts the route tree
+      try {
+        await window.api.switchAccount(email);
+      } catch {
+        // Failed switches leave the current account and page intact.
+      }
     }
   };
 

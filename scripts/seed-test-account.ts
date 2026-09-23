@@ -133,7 +133,6 @@ initDb(
   dbPath,
   join(resourcesDir, "companies.db"),
   join(resourcesDir, "breaches.db"),
-  join(resourcesDir, "enforcement.db"),
 );
 createAccountDb(dbPath);
 

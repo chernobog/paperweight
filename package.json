@@ -9,7 +9,7 @@
     "postinstall": "yarn --cwd analysis install && electron-rebuild -f -w better-sqlite3",
     "dev": "electron-vite dev",
     "dev:local": "tsx scripts/dev-local.ts",
-    "prebuild": "yarn build:companies && yarn build:breaches && yarn build:enforcement",
+    "prebuild": "yarn build:companies && yarn build:breaches",
     "build": "electron-vite build",
     "mcp": "cross-env PAPERWEIGHT_MCP=1 electron .",
     "preview": "electron-vite preview",
@@ -28,7 +28,7 @@
     "seed:test-account": "cross-env TSX_TSCONFIG_PATH=tsconfig.node.json ELECTRON_RUN_AS_NODE=1 electron --import tsx scripts/seed-test-account.ts",
     "test": "cross-env ELECTRON_RUN_AS_NODE=1 electron node_modules/jest/bin/jest.js",
     "test:mcp": "electron-vite build && cross-env ELECTRON_RUN_AS_NODE=1 PAPERWEIGHT_MCP=1 electron --import tsx scripts/smoke-mcp.ts",
-    "fixture:regenerate": "yarn build:companies && yarn build:breaches && yarn build:enforcement && cross-env TSX_TSCONFIG_PATH=tsconfig.node.json ELECTRON_RUN_AS_NODE=1 electron --import tsx scripts/generate-smoke-fixture.ts test/fixtures/smoke-account --replace",
+    "fixture:regenerate": "yarn build:companies && yarn build:breaches && cross-env TSX_TSCONFIG_PATH=tsconfig.node.json ELECTRON_RUN_AS_NODE=1 electron --import tsx scripts/generate-smoke-fixture.ts test/fixtures/smoke-account --replace",
     "test:smoke": "yarn build && for p in fresh runtime stored; do SMOKE_SKIP_BUILD=1 bash scripts/smoke-boot.sh \"$p\" || exit 1; done",
     "test:analysis": "yarn --cwd analysis test",
     "test:all": "yarn test && yarn test:analysis && yarn test:smoke"
@@ -51,10 +51,6 @@
       {
         "from": "resources/breaches.db",
         "to": "breaches.db"
-      },
-      {
-        "from": "resources/enforcement.db",
-        "to": "enforcement.db"
       },
       {
         "from": "build/mcp/paperweight-mcp",

@@ -370,26 +370,6 @@ export function createGmailProvider(
       return !!creds?.gmail?.accessToken;
     },
 
-    async getMessageCount(since: Date, until?: Date): Promise<number | undefined> {
-      try {
-        // Use messages.list with maxResults=1 to get resultSizeEstimate
-        // for the same query scope the sync will use (excludes spam/trash).
-        // Profile's messagesTotal includes spam/trash so it overestimates.
-        const afterEpoch = Math.floor(since.getTime() / 1000);
-        const params: Record<string, string> = { maxResults: "1" };
-        const qParts: string[] = [];
-        if (afterEpoch > 0) qParts.push(`after:${afterEpoch}`);
-        if (until) qParts.push(`before:${Math.floor(until.getTime() / 1000)}`);
-        if (qParts.length > 0) params.q = qParts.join(" ");
-        const result = (await gmailApiFetch("/messages", params)) as {
-          resultSizeEstimate?: number;
-        };
-        return result.resultSizeEstimate;
-      } catch {
-        return undefined;
-      }
-    },
-
     async listMessages(
       since: Date,
       until?: Date,
@@ -440,14 +420,6 @@ export function createGmailProvider(
         messages: emailMessages,
         nextPageToken: listResult.nextPageToken,
       };
-    },
-
-    async getMessage(messageId: string): Promise<EmailMessage> {
-      const msg = (await gmailApiFetch(`/messages/${messageId}`, {
-        format: "full",
-      })) as GmailRawMessage;
-
-      return await parseGmailMessage(msg, analysisOptions);
     },
 
     async trashMessage(messageId: string): Promise<void> {

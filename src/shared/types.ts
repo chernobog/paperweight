@@ -66,8 +66,7 @@ export const DEFAULT_CATEGORY: CategoryId = "unknown";
 export const DEFAULT_RISK: RiskLevel = "unknown";
 
 // Incremental sync windows
-export const FREE_TIER_SYNC_DAYS = 90;    // Free tier: 90-day window
-export const LICENSED_SYNC_DAYS = 365;    // Licensed: 1-year window on first run
+export const QUICK_SYNC_DAYS = 90; // Recent results first, then full history
 
 // Message processing
 export const BODY_PREVIEW_LENGTH = 150;
@@ -411,6 +410,32 @@ export interface CreateGdprCaseInput {
   openedAt?: number;
   subject?: string;
   body?: string;
+}
+
+export interface PrivacyRequestResult {
+  status:
+    | "sent"
+    | "failed"
+    | "sent_case_failed"
+    | "no_recipient"
+    | "active_case_exists"
+    | "declined"
+    | "cancelled"
+    | "approval_unavailable";
+  caseId?: number;
+  messageId?: string;
+}
+
+export interface CaseMessageResult {
+  status:
+    | "sent"
+    | "failed"
+    | "sent_event_failed"
+    | "not_available"
+    | "declined"
+    | "cancelled"
+    | "approval_unavailable";
+  messageId?: string;
 }
 
 export interface GdprCaseEventInput {

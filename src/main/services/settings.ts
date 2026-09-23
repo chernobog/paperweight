@@ -5,6 +5,12 @@ import { APP_CONFIG } from "@shared/config";
 import type { LicenseStatus, McpSetup, WhitelistEntry } from "@shared/types";
 import { licenseLog } from "../utils/log";
 
+export const PRO_REQUIRED_MESSAGE = "Paperweight Pro is required. Upgrade in Settings to continue.";
+
+export function requirePro(): void {
+  if (!getLicenseStatus().active) throw new Error(PRO_REQUIRED_MESSAGE);
+}
+
 // --- Key-value settings ---
 
 export function getSetting(key: string): string | undefined {
@@ -130,6 +136,7 @@ interface LicenseInfo {
 }
 
 const VALIDATION_CACHE_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
+const VALIDATION_TIMEOUT_MS = 8_000;
 
 function getLicensePath(): string {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -187,38 +194,57 @@ async function validateLicenseKey(
   const body = JSON.stringify({ key });
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { net } = require("electron") as typeof import("electron");
-  const response = await net.fetch(APP_CONFIG.LICENSE_API_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body,
+  const controller = new AbortController();
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => {
+      controller.abort();
+      reject(new Error("License validation timed out"));
+    }, VALIDATION_TIMEOUT_MS);
   });
+  try {
+    const response = await Promise.race([
+      net.fetch(APP_CONFIG.LICENSE_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+        signal: controller.signal,
+      }),
+      timedOut,
+    ]);
 
-  if (!response.ok) {
-    const text = await response.text();
+    if (!response.ok) {
+      const text = await Promise.race([response.text(), timedOut]);
 
-    try {
-      const parsed = text ? (JSON.parse(text) as unknown) : undefined;
-      if (
-        parsed &&
-        typeof parsed === "object" &&
-        "valid" in parsed &&
-        (parsed as { valid?: unknown }).valid === false
-      ) {
-        return { valid: false };
+      try {
+        const parsed = text ? (JSON.parse(text) as unknown) : undefined;
+        if (
+          parsed &&
+          typeof parsed === "object" &&
+          "valid" in parsed &&
+          (parsed as { valid?: unknown }).valid === false
+        ) {
+          return { valid: false };
+        }
+      } catch {
+        // ignore JSON parse errors
       }
-    } catch {
-      // ignore JSON parse errors
+
+      throw new Error(text || `License validation failed (${response.status})`);
     }
 
-    throw new Error(text || `License validation failed (${response.status})`);
+    return await Promise.race([
+      response.json() as Promise<{
+        valid: boolean;
+        tier?: "test" | "lifetime";
+        expiresAt?: string;
+        portalUrl?: string;
+      }>,
+      timedOut,
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
   }
-
-  return (await response.json()) as {
-    valid: boolean;
-    tier?: "test" | "lifetime";
-    expiresAt?: string;
-    portalUrl?: string;
-  };
 }
 
 export async function activateLicense(key: string): Promise<LicenseStatus> {
@@ -277,24 +303,28 @@ export async function hasValidLicense(): Promise<boolean> {
 
   try {
     const result = await validateLicenseKey(info.key);
+    const current = loadLicense();
+    if (!current || current.key !== info.key) {
+      return current ? !isExpired(current) : false;
+    }
     if (!result.valid) {
       licenseLog.info("License validation: invalid (remote)");
       deleteLicense();
       return false;
     }
     const updated: LicenseInfo = {
-      ...info,
+      ...current,
       validatedAt: Date.now(),
       expiresAt: result.expiresAt,
-      tier: result.tier || info.tier,
-      portalUrl: result.portalUrl ?? info.portalUrl,
+      tier: result.tier || current.tier,
+      portalUrl: result.portalUrl ?? current.portalUrl,
     };
     saveLicense(updated);
     const valid = !isExpired(updated);
     licenseLog.info(`License validation (remote): ${valid ? "valid" : "expired"}, tier: ${updated.tier}`);
     return valid;
   } catch (err) {
-    // Offline — fall back to local expiration check
+    // Offline or timed out — fall back to local expiration check
     licenseLog.error("License validation network error:", err instanceof Error ? err.message : String(err));
     return !isExpired(info);
   }

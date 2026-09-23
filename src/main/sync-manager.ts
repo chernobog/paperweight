@@ -16,7 +16,6 @@ import {
   invalidateAnalysisPassAtPath,
   needsAnalysisPass,
 } from "./services/analysis";
-import { getLicenseStatus } from "./services/settings";
 import log, { syncLog } from "./utils/log";
 import type { SyncStatus } from "@shared/types";
 
@@ -163,16 +162,10 @@ function startWorker(key: string, mode: WorkerMode): boolean {
   const breachesDbPath = is.dev
     ? join(app.getAppPath(), "resources", "breaches.db")
     : join(process.resourcesPath, "breaches.db");
-  const enforcementDbPath = is.dev
-    ? join(app.getAppPath(), "resources", "enforcement.db")
-    : join(process.resourcesPath, "enforcement.db");
-  const licensed = mode === "sync" && getLicenseStatus().active;
 
   if (mode === "sync") {
     syncLog.info(
-      `[${accountTag(key)}] Refresh starting — ${
-        licensed ? "licensed" : "incremental only (no license)"
-      }`,
+      `[${accountTag(key)}] Refresh starting`,
     );
   } else {
     syncLog.info(`[${accountTag(key)}] Message analysis starting`);
@@ -195,9 +188,7 @@ function startWorker(key: string, mode: WorkerMode): boolean {
       dbPath,
       companiesDbPath,
       breachesDbPath,
-      enforcementDbPath,
       credentials,
-      licensed,
       mode,
     },
   });
@@ -341,8 +332,8 @@ function startSync(email?: string): void {
 }
 
 export function startAllSyncs(): void {
-  const accounts = listAccounts();
   const activeEmail = getActiveEmail();
+  const accounts = listAccounts();
   const ordered = activeEmail
     ? [
         ...accounts.filter((account) => account.email === activeEmail),

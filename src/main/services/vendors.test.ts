@@ -59,7 +59,7 @@ function listedDomains(piiType: PiiType): string[] {
 }
 
 beforeAll(() => {
-  initDb(":memory:", "/nonexistent", "/nonexistent", "/nonexistent");
+  initDb(":memory:", "/nonexistent", "/nonexistent");
   getDb().exec(`
     ATTACH DATABASE ':memory:' AS companies;
     CREATE TABLE companies.companies (

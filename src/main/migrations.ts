@@ -168,7 +168,7 @@ function migrateScanScopeAllMail(): void {
  *
  * **Nothing is cleared.** Message IDs are stable for all three providers, so
  * resetting the sync cursors is enough to make the next sync behave like a fresh
- * install — quick window first, then the licensed walk back to the start — and
+ * install — quick window first, then the historical walk back to the start — and
  * every re-visited row merges through insertMessageVendor's upsert. Vendors,
  * messages, action_log, gdpr_cases, whitelist, pii_findings, pii_suppressions,
  * settings and the license all survive untouched.
@@ -291,6 +291,16 @@ export function migrateGdprCases(d: Database.Database): void {
   );
   if (!caseCols.has("last_viewed_at")) {
     d.exec("ALTER TABLE gdpr_cases ADD COLUMN last_viewed_at INTEGER");
+  }
+}
+
+/** Schema migration — page_since stores the date bound for an in-flight paginated query. */
+export function migrateSyncState(d: Database.Database): void {
+  const cols = new Set(
+    (d.pragma("table_info(sync_state)") as Array<{ name: string }>).map((c) => c.name),
+  );
+  if (!cols.has("page_since")) {
+    d.exec("ALTER TABLE sync_state ADD COLUMN page_since INTEGER");
   }
 }
 

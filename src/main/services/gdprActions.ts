@@ -9,7 +9,11 @@ import {
   buildFollowupEmail,
   buildReminderEmail,
 } from "@shared/gdpr/templates";
-import type { GdprRequestType } from "@shared/types";
+import type {
+  CaseMessageResult,
+  GdprRequestType,
+  PrivacyRequestResult,
+} from "@shared/types";
 import {
   createGdprCase,
   getGdprCaseById,
@@ -17,32 +21,8 @@ import {
   queryGdprCases,
 } from "./cases";
 import { sendEmail } from "./email";
-import { getSetting } from "./settings";
+import { getSetting, requirePro } from "./settings";
 import { getVendorDetail, updateVendor } from "./vendors";
-
-export interface PrivacyRequestResult {
-  status:
-    | "sent"
-    | "failed"
-    | "sent_case_failed"
-    | "no_recipient"
-    | "active_case_exists"
-    | "declined"
-    | "cancelled"
-    | "approval_unavailable";
-  caseId?: number;
-}
-
-export interface CaseMessageResult {
-  status:
-    | "sent"
-    | "failed"
-    | "sent_event_failed"
-    | "not_available"
-    | "declined"
-    | "cancelled"
-    | "approval_unavailable";
-}
 
 export type OutboundEmailApprovalResult =
   | "confirmed"
@@ -77,7 +57,10 @@ export async function sendPrivacyRequest(
   accountIdentifier?: string,
   languageOverride?: string,
   requestApproval?: RequestOutboundEmailApproval,
+  sentMessageId?: string,
+  recordOnly?: boolean,
 ): Promise<PrivacyRequestResult> {
+  requirePro();
   const detail = getVendorDetail(companyKey);
   if (detail.vendor.id !== vendorId) throw new Error("Company changed while preparing request");
   const hasActiveCase = queryGdprCases({ status: "active", vendorId })
@@ -97,32 +80,38 @@ export async function sendPrivacyRequest(
     ? buildAccessEmail(requester, accountIdentifier, language, userName)
     : buildDeletionEmail(requester, accountIdentifier, language, userName);
 
-  if (!requestApproval) return { status: "approval_unavailable" };
-  const approval = await requestApproval({
-    companyName: detail.vendor.name || detail.vendor.root_domain || companyKey,
-    recipient,
-    action: requestType,
-  });
-  if (approval !== "confirmed") return { status: approvalStatus(approval) };
+  let messageId = sentMessageId;
+  if (!recordOnly && !messageId) {
+    if (!requestApproval) return { status: "approval_unavailable" };
+    const approval = await requestApproval({
+      companyName: detail.vendor.name || detail.vendor.root_domain || companyKey,
+      recipient,
+      action: requestType,
+    });
+    if (approval !== "confirmed") return { status: approvalStatus(approval) };
 
-  if (detail.vendor.account_email !== requester) {
+    if (detail.vendor.account_email !== requester) {
+      updateVendor(vendorId, { account_email: requester });
+    }
+    const sent = await sendEmail(recipient, message.subject, message.body);
+    if (!sent.success) return { status: "failed" };
+    messageId = sent.messageId;
+  } else if (detail.vendor.account_email !== requester) {
     updateVendor(vendorId, { account_email: requester });
   }
-  const sent = await sendEmail(recipient, message.subject, message.body);
-  if (!sent.success) return { status: "failed" };
 
   try {
     const created = createGdprCase({
       vendorId,
       requestType,
       recipientEmail: recipient,
-      sentMessageId: sent.messageId,
+      sentMessageId: messageId,
       subject: message.subject,
       body: message.body,
     });
-    return { status: "sent", caseId: created.id };
+    return { status: "sent", caseId: created.id, messageId };
   } catch {
-    return { status: "sent_case_failed" };
+    return { status: "sent_case_failed", messageId };
   }
 }
 
@@ -131,7 +120,10 @@ export async function sendCaseMessage(
   action: "reminder" | "followup",
   mailboxEmail: string,
   requestApproval?: RequestOutboundEmailApproval,
+  recordOnly?: boolean,
+  sentMessageId?: string,
 ): Promise<CaseMessageResult> {
+  requirePro();
   const detail = getGdprCaseById(caseId);
   if (
     !detail
@@ -156,29 +148,34 @@ export async function sendCaseMessage(
     language,
     userName,
   );
-  if (!requestApproval) return { status: "approval_unavailable" };
-  const approval = await requestApproval({
-    companyName: detail.vendorName,
-    recipient: detail.recipientEmail,
-    action,
-  });
-  if (approval !== "confirmed") return { status: approvalStatus(approval) };
-  const sent = await sendEmail(
-    detail.recipientEmail,
-    message.subject,
-    message.body,
-    detail.sentMessageId,
-  );
-  if (!sent.success) return { status: "failed" };
+
+  let messageId = sentMessageId;
+  if (!recordOnly && !messageId) {
+    if (!requestApproval) return { status: "approval_unavailable" };
+    const approval = await requestApproval({
+      companyName: detail.vendorName,
+      recipient: detail.recipientEmail,
+      action,
+    });
+    if (approval !== "confirmed") return { status: approvalStatus(approval) };
+    const sent = await sendEmail(
+      detail.recipientEmail,
+      message.subject,
+      message.body,
+      detail.sentMessageId,
+    );
+    if (!sent.success) return { status: "failed" };
+    messageId = sent.messageId;
+  }
 
   try {
     insertGdprCaseEvent(
       caseId,
       action === "reminder" ? "reminder_sent" : "followup_sent",
-      { subject: message.subject, body: message.body },
+      { subject: message.subject, body: message.body, messageId },
     );
-    return { status: "sent" };
+    return { status: "sent", messageId };
   } catch {
-    return { status: "sent_event_failed" };
+    return { status: "sent_event_failed", messageId };
   }
 }

@@ -5,6 +5,7 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  unlinkSync,
   writeFileSync,
 } from "fs";
 import { tmpdir } from "os";
@@ -141,6 +142,31 @@ function prepareProfile(enabled: boolean): string {
     writeFileSync(registryPath, JSON.stringify(registry, null, 2), "utf-8");
   }
   return profile;
+}
+
+// Use the same OS-backed encryption as the real MCP process. This cached test
+// license never contacts the license API and exists only in a temporary profile.
+async function prepareLicense(profile: string): Promise<void> {
+  const script = join(profile, "seed-license.cjs");
+  writeFileSync(script, `
+    const { app, safeStorage } = require("electron");
+    const { writeFileSync } = require("fs");
+    const { join } = require("path");
+    app.setPath("userData", __dirname);
+    app.whenReady().then(() => {
+      const data = JSON.stringify({ key: "MCP-SMOKE-TEST", tier: "test", validatedAt: Date.now() });
+      writeFileSync(join(__dirname, "license.enc"), safeStorage.isEncryptionAvailable() ? safeStorage.encryptString(data) : data);
+      app.quit();
+    });
+  `);
+  const env = { ...process.env };
+  delete env.ELECTRON_RUN_AS_NODE;
+  delete env.PAPERWEIGHT_MCP;
+  const child = spawn(process.execPath, [script, "--no-sandbox", "--disable-gpu", "--password-store=basic"], {
+    env, stdio: "ignore",
+  });
+  if (await waitForExit(child) !== 0) throw new Error("Could not prepare MCP test license");
+  unlinkSync(script);
 }
 
 function seedReadSurface(profile: string): void {
@@ -345,7 +371,7 @@ function commandFor(profile: string): Command {
   if (packaged) {
     return {
       executable: join(root, "dist", "linux-unpacked", "resources", "paperweight-mcp"),
-      args: ["--no-sandbox"],
+      args: ["--no-sandbox", "--disable-gpu", "--password-store=basic"],
       env: {
         ...process.env,
         ELECTRON_DISABLE_SANDBOX: "1",
@@ -360,7 +386,7 @@ function commandFor(profile: string): Command {
       "mcp",
       process.platform === "win32" ? "paperweight-mcp.cmd" : "paperweight-mcp",
     ),
-    args: ["--no-sandbox"],
+    args: ["--no-sandbox", "--disable-gpu", "--password-store=basic"],
     env: {
       ...process.env,
       ELECTRON_DISABLE_SANDBOX: "1",
@@ -456,8 +482,10 @@ function openMcp(profile: string): McpConnection {
   };
 }
 
-async function proveDisabledAccess(): Promise<void> {
-  const command = commandFor(prepareProfile(false));
+async function proveDeniedStartup(pro: boolean): Promise<void> {
+  const profile = prepareProfile(!pro);
+  if (pro) await prepareLicense(profile);
+  const command = commandFor(profile);
   const child = spawn(command.executable, command.args, {
     cwd: root,
     env: command.env,
@@ -472,6 +500,7 @@ async function proveDisabledAccess(): Promise<void> {
 
 async function proveOverviewRead(): Promise<void> {
   const profile = prepareProfile(true);
+  await prepareLicense(profile);
   const readConnection = openMcp(profile);
   let request = readConnection.request;
 
@@ -1230,14 +1259,31 @@ async function proveOverviewRead(): Promise<void> {
     throw new Error("Write tool ignored revoked access");
   }
 
+  // Agent permissions remain enabled while the Pro entitlement is removed.
+  saveGlobalSetting("agentAccess", "actions");
+  unlinkSync(join(profile, "license.enc"));
+  const unlicensedRead = await request(requestId + 2, "tools/call", {
+    name: "list_mailboxes", arguments: {},
+  });
+  if (unlicensedRead.result?.isError !== true || !toolResultText(unlicensedRead).includes("Pro")) {
+    throw new Error("Running MCP server retained read access after license removal");
+  }
+  const unlicensedWrite = await request(requestId + 3, "tools/call", {
+    name: "set_company_reviewed",
+    arguments: { mailbox: primaryMailboxKey, key: primaryCompanyKey, reviewed: false },
+  });
+  if (unlicensedWrite.result?.isError !== true || !toolResultText(unlicensedWrite).includes("Pro")) {
+    throw new Error("Running MCP server retained write access after license removal");
+  }
   await actionConnection.close();
 }
 
 async function main(): Promise<void> {
   try {
-    await proveDisabledAccess();
+    await proveDeniedStartup(true);
+    await proveDeniedStartup(false);
     await proveOverviewRead();
-    console.info("MCP smoke OK: permissions, stdio, mailboxes, overview, search, detail, shutdown");
+    console.info("MCP smoke OK: Pro startup, live revocation, permissions, stdio, mailboxes, overview, search, detail, shutdown");
   } finally {
     for (const profile of profiles) rmSync(profile, { recursive: true, force: true });
   }

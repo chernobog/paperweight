@@ -141,7 +141,7 @@ const versionOf = (id: string) =>
   (getDb().prepare("SELECT analysis_version v FROM messages WHERE id = ?").get(id) as { v: string | null }).v;
 
 beforeAll(() => {
-  initDb(":memory:", "/nonexistent", "/nonexistent", "/nonexistent");
+  initDb(":memory:", "/nonexistent", "/nonexistent");
   const d = getDb();
   d.exec(`
     ATTACH DATABASE ':memory:' AS companies;

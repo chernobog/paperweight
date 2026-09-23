@@ -1,17 +1,17 @@
-import { ipcMain } from "electron";
+import { handle } from "./access";
 import { IPC } from "@shared/ipc";
 import { getDashboardStats, getDashboardTrend, getImpactStats, getRiskCounts, getActivityLog } from "../services/stats";
 
 export function registerStatsHandlers(): void {
-  ipcMain.handle(IPC.getDashboardStats, () => getDashboardStats());
+  handle(IPC.getDashboardStats, () => getDashboardStats());
 
-  ipcMain.handle(IPC.getDashboardTrend, () => getDashboardTrend(90));
+  handle(IPC.getDashboardTrend, () => getDashboardTrend(90));
 
-  ipcMain.handle(IPC.getImpactStats, () => getImpactStats());
+  handle(IPC.getImpactStats, () => getImpactStats());
 
-  ipcMain.handle(IPC.getRiskCounts, () => getRiskCounts());
+  handle(IPC.getRiskCounts, () => getRiskCounts());
 
-  ipcMain.handle(IPC.getActivityLog, (_e, limit: number, offset: number) =>
+  handle(IPC.getActivityLog, (_e, limit: number, offset: number) =>
     getActivityLog(limit, offset)
   );
 }

@@ -1,6 +1,14 @@
+import { mkdtempSync, rmSync, writeFileSync, unlinkSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
+
+let mockUserData = "";
+jest.mock("../sync-manager", () => ({ startAllSyncs: jest.fn() }));
 let saveSettingsHandler: ((event: unknown, settings: unknown) => void) | undefined;
 
 jest.mock("electron", () => ({
+  app: { getPath: () => mockUserData },
+  safeStorage: { isEncryptionAvailable: () => false },
   ipcMain: {
     handle: jest.fn((channel: string, handler: (event: unknown, value: unknown) => void) => {
       if (channel === "save-settings") saveSettingsHandler = handler;
@@ -11,6 +19,7 @@ jest.mock("electron", () => ({
 }));
 jest.mock("../services/settings", () => ({
   activateLicense: jest.fn(),
+  requirePro: jest.requireActual<typeof import("../services/settings")>("../services/settings").requirePro,
   applyAutoLaunch: jest.fn(),
   deleteLicense: jest.fn(),
   getLicenseStatus: jest.fn(),
@@ -35,8 +44,28 @@ const saveGlobal = jest.mocked(saveGlobalSetting);
 describe("AI Agent access settings", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockUserData = mkdtempSync(join(tmpdir(), "paperweight-agent-settings-"));
+    writeFileSync(join(mockUserData, "license.enc"), JSON.stringify({
+      key: "SETTINGS-TEST", tier: "test", validatedAt: Date.now(),
+    }));
     saveSettingsHandler = undefined;
     registerSettingsHandlers();
+  });
+
+  afterEach(() => rmSync(mockUserData, { recursive: true, force: true }));
+
+  it.each(["read", "actions"])("blocks Free from enabling %s access through the real entitlement guard", (access) => {
+    unlinkSync(join(mockUserData, "license.enc"));
+    expect(() => saveSettingsHandler?.({}, { agentAccess: access, confirmAgentActions: true }))
+      .toThrow("Paperweight Pro is required");
+    expect(saveGlobal).not.toHaveBeenCalled();
+  });
+
+  it("allows Free to revoke agent access", () => {
+    unlinkSync(join(mockUserData, "license.enc"));
+    getGlobal.mockReturnValue("actions");
+    saveSettingsHandler?.({}, { agentAccess: "off" });
+    expect(saveGlobal).toHaveBeenCalledWith("agentAccess", "off");
   });
 
   it("requires explicit confirmation before enabling Read & write", () => {

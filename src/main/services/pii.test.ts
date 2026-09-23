@@ -115,7 +115,7 @@ function insertProfileMatch(type: PiiType, value: string): void {
   }
 }
 
-beforeAll(() => initDb(":memory:", "/nonexistent", "/nonexistent", "/nonexistent"));
+beforeAll(() => initDb(":memory:", "/nonexistent", "/nonexistent"));
 beforeEach(() => {
   getDb().exec(
     `DELETE FROM global.pii_suppressions;

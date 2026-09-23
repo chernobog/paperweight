@@ -1,3 +1,4 @@
+import { useActionAccess } from "../context/LicenseContext";
 import { useCallback, useRef, useState } from "react";
 import type { PiiRevealedValue, PiiValue } from "@shared/types";
 
@@ -22,6 +23,7 @@ export function usePiiValueActions({
   loadValues,
   revealValues,
 }: UsePiiValueActionsOptions) {
+  const allowAction = useActionAccess();
   const [revealed, setRevealed] = useState<Map<number, string>>();
   const [showValues, setShowValues] = useState(false);
   const showValuesRef = useRef(false);
@@ -92,6 +94,7 @@ export function usePiiValueActions({
 
   const runAction = useCallback(
     async (targets: PiiValue[], action: PiiAction) => {
+      if (!allowAction("curate")) return;
       setBusy(true);
       setError(undefined);
       try {
@@ -110,7 +113,7 @@ export function usePiiValueActions({
         setBusy(false);
       }
     },
-    [reload],
+    [reload, allowAction],
   );
 
   const confirmValues = useCallback(

@@ -395,7 +395,7 @@ export function registerCompanyTools(server: McpServer, includeWrites: boolean):
   if (includeWrites) server.registerTool(
     "unsubscribe_company",
     {
-      description: "Unsubscribe from a company. Sends a one-click request or email when possible. If the list only has a web page, return that url so the user can open it. Never tell them to use the Paperweight app.",
+      description: "Unsubscribe from one mailing list at this company. Completes a single one-click or email target per call and leaves other lists pending — call again for each remaining target. If the list only has a web page, return that url so the user can open it and do not mark it completed. Never tell them to use the Paperweight app.",
       annotations: {
         readOnlyHint: false,
         destructiveHint: true,
@@ -417,7 +417,9 @@ export function registerCompanyTools(server: McpServer, includeWrites: boolean):
         status: z.enum(["unsubscribed", "manual_required", "not_available", "failed"]),
         method: z.enum(["one_click", "email", "browser"]).optional(),
         url: z.string().min(1).optional()
-          .describe("Unsubscribe page. Show this URL to the user."),
+          .describe("Completed target, or the unsubscribe page to open when status is manual_required."),
+        remainingTargets: z.number().int().nonnegative().optional()
+          .describe("Mailing-list targets still pending for this company after this call."),
       }),
     },
     async ({ mailbox: requestedMailbox, key }) => {
@@ -447,6 +449,9 @@ export function registerCompanyTools(server: McpServer, includeWrites: boolean):
           },
           status: result.status,
           method: result.method,
+          ...(typeof result.remainingTargets === "number"
+            ? { remainingTargets: result.remainingTargets }
+            : {}),
           ...(result.url ? { url: result.url } : {}),
         };
         const toolResult = agentToolResult(response, result.status === "failed");

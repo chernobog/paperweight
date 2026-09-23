@@ -214,7 +214,7 @@ export default function AccountDiscoveryPage() {
 
       <FeatureFinalCta
         heading="Build your account inventory"
-        body="Try Paperweight free with one email account and 90 days of history. Upgrade anytime for unlimited history and multi-account support."
+        body="Discover and curate your footprint free with one email account and full history. Pro adds cleanup, privacy requests, multiple accounts, and MCP access."
         primaryAction={{
           href: SITE_CONFIG.LICENSE_URL,
           label: "Buy Lifetime License",

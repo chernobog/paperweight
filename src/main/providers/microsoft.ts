@@ -454,32 +454,6 @@ export function createMicrosoftProvider(
       return !!loadCredentials()?.microsoft?.accessToken;
     },
 
-    async getMessageCount(since: Date, until?: Date): Promise<number | undefined> {
-      try {
-        const filterParts = [`receivedDateTime ge ${since.toISOString()}`];
-        if (until) filterParts.push(`receivedDateTime lt ${until.toISOString()}`);
-
-        // All folders (not just inbox). This is a progress-bar estimate only, never used for
-        // correctness. It does NOT apply the Junk/Deleted/Sent/Drafts exclusion the listing
-        // does (there's no cheap server-side count for "all mail minus these folders"), so with
-        // a large Sent/Trash the total can run well above the messages actually processed — the
-        // bar may stall below 100%. Acceptable for an estimate; revisit if it misleads users.
-        const url = new URL(`${GRAPH_ME_BASE}/messages`);
-        url.searchParams.set("$count", "true");
-        url.searchParams.set("$filter", filterParts.join(" and "));
-        url.searchParams.set("$top", "1");
-        url.searchParams.set("$select", "id");
-
-        const result = (await graphGet(url.toString(), {
-          "ConsistencyLevel": "eventual",
-        })) as { "@odata.count"?: number };
-
-        return result["@odata.count"];
-      } catch {
-        return undefined;
-      }
-    },
-
     async listMessages(
       since: Date,
       until?: Date,
@@ -552,14 +526,6 @@ export function createMicrosoftProvider(
         messages: emailMessages,
         nextPageToken: listResult["@odata.nextLink"],
       };
-    },
-
-    async getMessage(messageId: string): Promise<EmailMessage> {
-      const msg = (await graphGet(
-        `${GRAPH_ME_BASE}/messages/${messageId}?$select=id,receivedDateTime,from,subject,bodyPreview,body,internetMessageHeaders`
-      )) as GraphMessage;
-
-      return parseGraphMessage(msg, analysisOptions);
     },
 
     async trashMessage(messageId: string): Promise<void> {

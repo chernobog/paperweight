@@ -64,7 +64,7 @@ function seedPreUpgradeDb(): void {
   `);
 }
 
-beforeAll(() => initDb(":memory:", "/nonexistent", "/nonexistent", "/nonexistent"));
+beforeAll(() => initDb(":memory:", "/nonexistent", "/nonexistent"));
 beforeEach(seedPreUpgradeDb);
 
 describe("applyEngineSwitch", () => {

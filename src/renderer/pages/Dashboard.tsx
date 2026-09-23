@@ -6,7 +6,7 @@ import type {
   DashboardStats,
   GdprCaseSummary,
 } from "@shared/types";
-import { useLicense } from "../context/LicenseContext";
+import { useLicense, useOpenProUpgrade } from "../context/LicenseContext";
 import TrendChartCard from "../components/TrendChartCard";
 import ImpactBlock from "../components/ImpactBlock";
 import { AlertTriangle, ArrowRight, ChevronRight, Contact, FolderClosed, Inbox, Mail } from "lucide-react";
@@ -29,6 +29,7 @@ export default function Dashboard(): JSX.Element {
     markers: [],
   });
   const license = useLicense();
+  const openProUpgrade = useOpenProUpgrade();
   const [loading, setLoading] = useState(true);
   const [impactKey] = useState(0);
   const [account, setAccount] = useState<AccountInfo>();
@@ -80,14 +81,14 @@ export default function Dashboard(): JSX.Element {
       {!license.active && (
         <div
           className="flex items-center justify-between p-4 bg-primary/10 border border-primary/20 rounded-box cursor-pointer hover:bg-primary/15 transition-colors"
-          onClick={() => navigate("/settings")}
+          onClick={openProUpgrade}
         >
           <div>
             <p className="font-semibold text-base-content">
-              Upgrade your account
+              Upgrade to Pro
             </p>
             <p className="text-sm text-base-content/60">
-              Activate a license to unlock full email history sync and more.
+              Clean up what you've found. Unsubscribe, remove unwanted mail, send privacy requests, use multiple accounts, and connect MCP agents.
             </p>
           </div>
           <ArrowRight

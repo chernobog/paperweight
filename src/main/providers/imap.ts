@@ -227,19 +227,6 @@ export function createImapProvider(
       return client !== undefined;
     },
 
-    async getMessageCount(_since?: Date, until?: Date): Promise<number | undefined> {
-      // For date-range queries (historical chunks), a SEARCH requires a mailbox
-      // lock which we don't hold here — return undefined and show count-based progress.
-      if (until) return undefined;
-      if (!client) return undefined;
-      try {
-        const status = await client.status(await getScanMailbox(), { messages: true });
-        return status.messages;
-      } catch {
-        return undefined;
-      }
-    },
-
     async listMessages(
       since: Date,
       until?: Date,
@@ -285,28 +272,6 @@ export function createImapProvider(
       }
 
       return { messages };
-    },
-
-    async getMessage(messageId: string): Promise<EmailMessage> {
-      if (!client) throw new Error("Not connected to IMAP");
-
-      const uid = parseImapUid(messageId);
-
-      const lock = await client.getMailboxLock(await getScanMailbox());
-      try {
-        const msg = await client.fetchOne(
-          `${uid}`,
-          { source: true, envelope: true, uid: true },
-          { uid: true }  // treat first arg as UID, not sequence number
-        );
-        if (!msg) throw new Error(`Message ${messageId} not found`);
-
-        const parsed = await parseImapMessage(msg, "imap-", analysisOptions);
-        if (!parsed) throw new Error(`Message ${messageId} could not be parsed`);
-        return parsed;
-      } finally {
-        lock.release();
-      }
     },
 
     async trashMessage(messageId: string): Promise<void> {

@@ -1,4 +1,4 @@
-import { ipcMain } from "electron";
+import { handle } from "./access";
 import { IPC } from "@shared/ipc";
 import type { UserProfile } from "@shared/types";
 import { getUserProfile, saveUserProfile } from "../services/profile";
@@ -95,9 +95,9 @@ function isProfile(value: unknown): value is UserProfile {
 }
 
 export function registerProfileHandlers(): void {
-  ipcMain.handle(IPC.getUserProfile, () => getUserProfile());
+  handle(IPC.getUserProfile, () => getUserProfile());
 
-  ipcMain.handle(IPC.saveUserProfile, (_event, profile: unknown) => {
+  handle(IPC.saveUserProfile, (_event, profile: unknown) => {
     if (!isProfile(profile)) throw new Error("Invalid user profile");
     if (saveUserProfile(profile)) markProfileAnalysisStale();
   });

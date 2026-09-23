@@ -5,10 +5,14 @@ jest.mock("../credentials", () => ({ emailToFileKey: jest.fn() }));
 
 import { getDb, initDb } from "../db";
 import {
+  getAllUnsubscribeMethodsForVendor,
   getMessageById,
   getMessageIdsByVendor,
   insertMessageVendor,
+  markListUnsubscribed,
+  markVendorUnsubscribed,
   MESSAGE_COLUMNS,
+  reapplyUnsubscribedFromActionLog,
 } from "./messages";
 import { parseHeaderPairs } from "@shared/utils";
 import { MARKETING_ACTION_TYPES } from "@shared/types";
@@ -102,7 +106,7 @@ function bodylessMessage(id: string, overrides: Partial<EmailMessage> = {}): Ema
 }
 
 beforeAll(() => {
-  initDb(":memory:", "/nonexistent", "/nonexistent", "/nonexistent");
+  initDb(":memory:", "/nonexistent", "/nonexistent");
 });
 
 beforeEach(() => {
@@ -323,5 +327,144 @@ describe("parseHeaderPairs — dual-shape tolerance", () => {
       ["List-Unsubscribe", "<https://x/u>"],
       ["From", "a@b.com"],
     ]);
+  });
+});
+
+describe("unsubscribe targets", () => {
+  it("keeps distinct mailing-list URLs and only completes the selected list", () => {
+    const vendorId = insertVendor("lists.example.test");
+    const older = Date.now() - 86_400_000;
+    const newer = Date.now();
+    insertMessageVendor(fullMessage("list-a", {
+      date: older,
+      senderEmail: "a@lists.example.test",
+      analysis: analysis({
+        type: "promotion",
+        unsubscribe: { method: "rfc8058", target: "https://lists.example.test/a" },
+      }),
+    }), vendorId);
+    insertMessageVendor(fullMessage("list-b", {
+      date: newer,
+      senderEmail: "b@lists.example.test",
+      analysis: analysis({
+        type: "promotion",
+        unsubscribe: { method: "rfc8058", target: "https://lists.example.test/b" },
+      }),
+    }), vendorId);
+
+    const methods = getAllUnsubscribeMethodsForVendor(vendorId);
+    expect(methods.map((entry) => entry.url).sort()).toEqual([
+      "https://lists.example.test/a",
+      "https://lists.example.test/b",
+    ]);
+
+    markListUnsubscribed(vendorId, "https://lists.example.test/a");
+    expect(getMessageById("list-a")?.status).toBe("unsubscribed");
+    expect(getMessageById("list-b")?.status).toBeNull();
+    expect(getAllUnsubscribeMethodsForVendor(vendorId).map((entry) => entry.url)).toEqual([
+      "https://lists.example.test/b",
+    ]);
+  });
+
+  it("still supports whole-vendor unsubscribe", () => {
+    const vendorId = insertVendor("whole.example.test");
+    insertMessageVendor(fullMessage("all-a", {
+      senderEmail: "a@whole.example.test",
+      analysis: analysis({
+        type: "promotion",
+        unsubscribe: { method: "list-unsubscribe", target: "https://whole.example.test/a" },
+      }),
+    }), vendorId);
+    insertMessageVendor(fullMessage("all-b", {
+      senderEmail: "b@whole.example.test",
+      analysis: analysis({
+        type: "promotion",
+        unsubscribe: { method: "footer", target: "https://whole.example.test/b" },
+      }),
+    }), vendorId);
+    markVendorUnsubscribed(vendorId);
+    expect(getMessageById("all-a")?.status).toBe("unsubscribed");
+    expect(getMessageById("all-b")?.status).toBe("unsubscribed");
+  });
+
+  it("keeps query-parameter list targets distinct", () => {
+    const vendorId = insertVendor("params.example.test");
+    insertMessageVendor(fullMessage("param-a", {
+      senderEmail: "a@params.example.test",
+      analysis: analysis({
+        type: "promotion",
+        unsubscribe: { method: "rfc8058", target: "https://params.example.test/unsubscribe?list=A&token=abc" },
+      }),
+    }), vendorId);
+    insertMessageVendor(fullMessage("param-b", {
+      senderEmail: "b@params.example.test",
+      analysis: analysis({
+        type: "promotion",
+        unsubscribe: { method: "rfc8058", target: "https://params.example.test/unsubscribe?list=B&token=abc" },
+      }),
+    }), vendorId);
+
+    expect(getAllUnsubscribeMethodsForVendor(vendorId).map((entry) => entry.url).sort()).toEqual([
+      "https://params.example.test/unsubscribe?list=A&token=abc",
+      "https://params.example.test/unsubscribe?list=B&token=abc",
+    ]);
+    markListUnsubscribed(vendorId, "https://params.example.test/unsubscribe?list=A&token=abc");
+    expect(getMessageById("param-a")?.status).toBe("unsubscribed");
+    expect(getMessageById("param-b")?.status).toBeNull();
+    expect(getAllUnsubscribeMethodsForVendor(vendorId).map((entry) => entry.url)).toEqual([
+      "https://params.example.test/unsubscribe?list=B&token=abc",
+    ]);
+
+    getDb().prepare("UPDATE messages SET status = NULL WHERE vendor_id = ?").run(vendorId);
+    reapplyUnsubscribedFromActionLog();
+    expect(getMessageById("param-a")?.status).toBe("unsubscribed");
+    expect(getMessageById("param-b")?.status).toBeNull();
+    expect(getAllUnsubscribeMethodsForVendor(vendorId).map((entry) => entry.url)).toEqual([
+      "https://params.example.test/unsubscribe?list=B&token=abc",
+    ]);
+  });
+
+  it("replays list unsubscribe onto matching URLs only, and vendor-wide onto the whole vendor", () => {
+    const listVendor = insertVendor("replay-list.example.test");
+    insertMessageVendor(fullMessage("replay-a", {
+      senderEmail: "a@replay-list.example.test",
+      analysis: analysis({
+        type: "promotion",
+        unsubscribe: { method: "rfc8058", target: "https://replay-list.example.test/a" },
+      }),
+    }), listVendor);
+    insertMessageVendor(fullMessage("replay-b", {
+      senderEmail: "b@replay-list.example.test",
+      analysis: analysis({
+        type: "promotion",
+        unsubscribe: { method: "rfc8058", target: "https://replay-list.example.test/b" },
+      }),
+    }), listVendor);
+    markListUnsubscribed(listVendor, "https://replay-list.example.test/a");
+    getDb().prepare("UPDATE messages SET status = NULL WHERE vendor_id = ?").run(listVendor);
+    reapplyUnsubscribedFromActionLog();
+    expect(getMessageById("replay-a")?.status).toBe("unsubscribed");
+    expect(getMessageById("replay-b")?.status).toBeNull();
+
+    const wholeVendor = insertVendor("replay-whole.example.test");
+    insertMessageVendor(fullMessage("replay-all-a", {
+      senderEmail: "a@replay-whole.example.test",
+      analysis: analysis({
+        type: "promotion",
+        unsubscribe: { method: "list-unsubscribe", target: "https://replay-whole.example.test/a" },
+      }),
+    }), wholeVendor);
+    insertMessageVendor(fullMessage("replay-all-b", {
+      senderEmail: "b@replay-whole.example.test",
+      analysis: analysis({
+        type: "promotion",
+        unsubscribe: { method: "footer", target: "https://replay-whole.example.test/b" },
+      }),
+    }), wholeVendor);
+    markVendorUnsubscribed(wholeVendor);
+    getDb().prepare("UPDATE messages SET status = NULL WHERE vendor_id = ?").run(wholeVendor);
+    reapplyUnsubscribedFromActionLog();
+    expect(getMessageById("replay-all-a")?.status).toBe("unsubscribed");
+    expect(getMessageById("replay-all-b")?.status).toBe("unsubscribed");
   });
 });

@@ -767,11 +767,6 @@ export function updateVendor(
   d.prepare(`UPDATE vendors SET ${sets.join(", ")} WHERE id = ?`).run(...params);
 }
 
-export function deleteVendor(id: number): void {
-  const d = getDb();
-  d.prepare("DELETE FROM vendors WHERE id = ?").run(id);
-}
-
 export function getVendorDetail(groupKey: string): VendorDetail {
   const d = getDb();
 

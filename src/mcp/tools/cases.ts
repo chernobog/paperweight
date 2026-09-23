@@ -251,6 +251,10 @@ export function registerCaseTools(server: McpServer, includeWrites: boolean): vo
           .describe("Optional account reference included in the standard request template."),
         language: z.enum(languageValues).optional()
           .describe("Optional request language. Paperweight otherwise uses the same domain-based default as the App."),
+        sentMessageId: z.string().trim().min(1).max(500).optional()
+          .describe("If a previous send succeeded but recording failed, pass the returned messageId to record the case without sending again."),
+        recordOnly: z.boolean().optional()
+          .describe("If a previous send succeeded but recording failed, set true to record the case without sending again. Use this when the provider did not return a message ID."),
       }),
       outputSchema: z.object({
         mailbox: z.string(),
@@ -267,10 +271,11 @@ export function registerCaseTools(server: McpServer, includeWrites: boolean): vo
           "approval_unavailable",
         ]),
         caseId: z.string().optional(),
+        messageId: z.string().optional(),
         reason: z.string().optional(),
       }),
     },
-    async ({ mailbox: requestedMailbox, key, requestType, recipientEmail, accountIdentifier, language }, context) => {
+    async ({ mailbox: requestedMailbox, key, requestType, recipientEmail, accountIdentifier, language, sentMessageId, recordOnly }, context) => {
       if (!hasWriteAccess()) return writeAccessError();
       try {
         requireSelectedMailbox(requestedMailbox);
@@ -288,10 +293,14 @@ export function registerCaseTools(server: McpServer, includeWrites: boolean): vo
                 recipientEmail,
                 accountIdentifier,
                 language,
-                async (approval) => requestOutboundEmailApproval(
-                  context,
-                  `Send a ${approval.action} request to ${approval.companyName} at ${approval.recipient}?`,
-                ),
+                recordOnly || sentMessageId
+                  ? undefined
+                  : async (approval) => requestOutboundEmailApproval(
+                    context,
+                    `Send a ${approval.action} request to ${approval.companyName} at ${approval.recipient}?`,
+                  ),
+                sentMessageId,
+                recordOnly,
               ),
             );
             return {
@@ -310,6 +319,7 @@ export function registerCaseTools(server: McpServer, includeWrites: boolean): vo
           caseId: result.caseId
             ? mailboxReference(result.caseId, requestedMailbox)
             : undefined,
+          messageId: result.messageId,
           reason: result.status === "approval_unavailable"
             ? OUTBOUND_EMAIL_UNAVAILABLE_REASON
             : undefined,
@@ -342,6 +352,10 @@ export function registerCaseTools(server: McpServer, includeWrites: boolean): vo
         mailbox: mailboxSchema,
         id: z.string().describe("An opaque case ref returned by search_cases."),
         action: z.enum(["reminder", "followup"]),
+        recordOnly: z.boolean().optional()
+          .describe("If a previous send succeeded but recording failed, set true to record the event without sending again."),
+        sentMessageId: z.string().trim().min(1).max(500).optional()
+          .describe("If a previous send succeeded but recording failed, pass the returned messageId to record the event without sending again."),
       }),
       outputSchema: z.object({
         mailbox: z.string(),
@@ -356,10 +370,11 @@ export function registerCaseTools(server: McpServer, includeWrites: boolean): vo
           "cancelled",
           "approval_unavailable",
         ]),
+        messageId: z.string().optional(),
         reason: z.string().optional(),
       }),
     },
-    async ({ mailbox: requestedMailbox, id, action }, context) => {
+    async ({ mailbox: requestedMailbox, id, action, recordOnly, sentMessageId }, context) => {
       if (!hasWriteAccess()) return writeAccessError();
       try {
         requireSelectedMailbox(requestedMailbox);
@@ -372,10 +387,14 @@ export function registerCaseTools(server: McpServer, includeWrites: boolean): vo
                 caseId,
                 action,
                 selectedMailbox,
-                async (approval) => requestOutboundEmailApproval(
-                  context,
-                  `Send a ${approval.action === "followup" ? "follow-up" : approval.action} to ${approval.companyName} at ${approval.recipient}?`,
-                ),
+                recordOnly || sentMessageId
+                  ? undefined
+                  : async (approval) => requestOutboundEmailApproval(
+                    context,
+                    `Send a ${approval.action === "followup" ? "follow-up" : approval.action} to ${approval.companyName} at ${approval.recipient}?`,
+                  ),
+                recordOnly,
+                sentMessageId,
               ),
             ),
         );
@@ -384,6 +403,7 @@ export function registerCaseTools(server: McpServer, includeWrites: boolean): vo
           caseId: id,
           action,
           status: result.status,
+          messageId: result.messageId,
           reason: result.status === "approval_unavailable"
             ? OUTBOUND_EMAIL_UNAVAILABLE_REASON
             : undefined,

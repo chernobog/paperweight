@@ -23,8 +23,6 @@ import {
 import {
   getSetting,
   saveSetting,
-  hasValidLicense,
-  getLicenseStatus,
 } from "./settings";
 import { syncCaseRepliesForVendors } from "./cases";
 import { loadCredentials } from "../credentials";
@@ -33,7 +31,7 @@ import { friendlyConnectionError } from "../providers/utils";
 import { PERSONAL_DOMAINS } from "@paperweight/analysis/contracts";
 import { getRootDomain } from "@shared/utils";
 import type { SyncStatus } from "@shared/types";
-import { FREE_TIER_SYNC_DAYS, LICENSED_SYNC_DAYS } from "@shared/types";
+import { QUICK_SYNC_DAYS } from "@shared/types";
 import { syncLog } from "../utils/log";
 import type { EmailMessage, EmailProvider } from "../providers/types";
 import {
@@ -50,10 +48,10 @@ const HISTORICAL_SYNC_DAYS = process.env.HISTORICAL_SYNC_DAYS
   : undefined;
 
 const HISTORICAL_CHUNK_DAYS = 90;
-// Isolated gaps are normal, but three empty windows (~270 days) are enough
+// Isolated gaps are normal, but four empty windows (~360 days) are enough
 // evidence that the account predates no more mail. The 1995 floor remains only
 // an absolute fallback.
-const HISTORICAL_EMPTY_CHUNK_LIMIT = 3;
+const HISTORICAL_EMPTY_CHUNK_LIMIT = 4;
 
 // Incremental date-range adds re-query a small window before last_sync_at so a message
 // arriving around the previous sync boundary isn't missed. Re-visited ids merge through
@@ -69,6 +67,7 @@ const HISTORICAL_FLOOR_DATE = new Date("1995-01-01");
 interface SyncStateRow {
   last_sync_at: number | null;
   next_page_token: string | null;
+  page_since: number | null;
   quick_sync_done_at: number | null;
   historical_cursor: number | null;
   historical_done: number;
@@ -78,6 +77,7 @@ interface SyncStateRow {
 interface SyncStateUpdate {
   last_sync_at?: number | null;
   next_page_token?: string | null;
+  page_since?: number | null;
   quick_sync_done_at?: number | null;
   historical_cursor?: number | null;
   historical_done?: 0 | 1;
@@ -87,13 +87,14 @@ interface SyncStateUpdate {
 export function getSyncState(d: Database.Database = getDb()) {
   const row = d
     .prepare(
-      "SELECT last_sync_at, next_page_token, quick_sync_done_at, historical_cursor, historical_done, sync_checkpoint FROM sync_state WHERE id = 1",
+      "SELECT last_sync_at, next_page_token, page_since, quick_sync_done_at, historical_cursor, historical_done, sync_checkpoint FROM sync_state WHERE id = 1",
     )
     .get() as SyncStateRow;
 
   return {
     last_sync_at: row.last_sync_at ?? undefined,
     next_page_token: row.next_page_token ?? undefined,
+    page_since: row.page_since ?? undefined,
     quick_sync_done_at: row.quick_sync_done_at ?? undefined,
     historical_cursor: row.historical_cursor ?? undefined,
     historical_done: row.historical_done === 1,
@@ -115,10 +116,10 @@ function updateSyncState(update: SyncStateUpdate): void {
 export function clearSyncData(): void {
   getDb().exec(`
     DELETE FROM messages;
-    DELETE FROM vendors;
     UPDATE sync_state SET
       last_sync_at = NULL,
       next_page_token = NULL,
+      page_since = NULL,
       quick_sync_done_at = NULL,
       historical_cursor = NULL,
       historical_done = 0,
@@ -264,40 +265,38 @@ async function runRemovalPass(provider: EmailProvider): Promise<void> {
 // The IMAP all-mail switch clears messages (UIDs change namespace), but vendors and
 // action_log survive. Once the re-sync has repopulated messages, re-apply per-message
 // "unsubscribed" status from the action_log. Runs while the flag is set (idempotent);
-// cleared once backfill is complete (historical for licensed, first incremental for free).
+// cleared once backfill is complete (historical sync for every account).
 const REAPPLY_UNSUB_FLAG = "migration:reapply-unsub";
 
-function maybeReapplyUnsubscribed(licensed: boolean): void {
-  if (getSetting(REAPPLY_UNSUB_FLAG) !== "1") return;
+function maybeReapplyUnsubscribed(): void {
   reapplyUnsubscribedFromActionLog();
+  if (getSetting(REAPPLY_UNSUB_FLAG) !== "1") return;
   const syncState = getSyncState();
-  const backfillComplete = licensed
-    ? syncState.historical_done
-    : !!syncState.quick_sync_done_at;
-  if (backfillComplete) saveSetting(REAPPLY_UNSUB_FLAG, "0");
+  if (syncState.historical_done) saveSetting(REAPPLY_UNSUB_FLAG, "0");
 }
 
 // --- Incremental sync ---
-// First run: fetches last FREE_TIER_SYNC_DAYS (free) or LICENSED_SYNC_DAYS (licensed) days.
+// First run: fetches the recent window before walking the full history.
 // Subsequent runs: date-based since last_sync_at (minus a small overlap). Removals are
 // applied separately by runRemovalPass().
 
 async function runIncrementalSync(
   provider: EmailProvider,
-  licensed: boolean,
   syncProgress: SyncProgress,
 ): Promise<void> {
   const syncState = getSyncState();
 
   const isFirstRun = !syncState.quick_sync_done_at;
 
-  // First run window: licensed users get 1 year, free users get 90 days.
+  // Keep the first window short so recent results appear quickly.
   // Subsequent runs use last_sync_at (minus a small overlap) so the window size only
   // matters on first run.
-  const syncDays = licensed ? LICENSED_SYNC_DAYS : FREE_TIER_SYNC_DAYS;
-  const since = syncState.last_sync_at
-    ? new Date(syncState.last_sync_at - INCREMENTAL_OVERLAP_MS)
-    : new Date(Date.now() - syncDays * 86_400_000);
+  const syncDays = QUICK_SYNC_DAYS;
+  const since = syncState.next_page_token && syncState.page_since
+    ? new Date(syncState.page_since)
+    : syncState.last_sync_at
+      ? new Date(syncState.last_sync_at - INCREMENTAL_OVERLAP_MS)
+      : new Date(Date.now() - syncDays * 86_400_000);
   const periodEnd = syncProgress.startedAt;
 
   syncLog.info(
@@ -365,8 +364,10 @@ async function runIncrementalSync(
 
     if (result.nextPageToken) {
       pageToken = result.nextPageToken;
-      // Save checkpoint so an interrupted sync can resume mid-page
-      updateSyncState({ last_sync_at: Date.now(), next_page_token: pageToken });
+      // Save the page token with the since bound used for this query. Do not
+      // advance last_sync_at until the query finishes — that watermark is the
+      // next run's since, and changing it mid-pagination skips remaining mail.
+      updateSyncState({ next_page_token: pageToken, page_since: since.getTime() });
     } else {
       break;
     }
@@ -378,6 +379,7 @@ async function runIncrementalSync(
   const stateUpdate: SyncStateUpdate = {
     last_sync_at: now,
     next_page_token: null,
+    page_since: null,
   };
 
   if (isFirstRun) {
@@ -504,7 +506,7 @@ async function runHistoricalChunk(
 
 // --- Main entry point ---
 
-export async function runSync(licensedOverride?: boolean): Promise<void> {
+export async function runSync(): Promise<void> {
   if (currentStatus.running) {
     syncLog.warn("Sync skipped (already running)");
     return;
@@ -552,56 +554,44 @@ export async function runSync(licensedOverride?: boolean): Promise<void> {
     const connection = await provider.connect();
     syncLog.info(`Provider connected (${connection.type})`);
 
-    // getLicenseStatus() calls loadLicense() which uses safeStorage — unavailable in
-    // worker threads. When licensedOverride is provided (worker context), skip it entirely.
-    let licensed: boolean;
-    if (licensedOverride !== undefined) {
-      licensed = licensedOverride;
-    } else {
-      const licenseStatus = getLicenseStatus();
-      licensed = licenseStatus.active && (await hasValidLicense());
-    }
-
-    // Phase 1: Incremental sync (always runs — window is 90d free / 365d licensed on first run)
-    await runIncrementalSync(provider, licensed, syncProgress);
+    // Recent messages first, then full history for every account.
+    await runIncrementalSync(provider, syncProgress);
 
     // Phase 1.5: Apply removals (deletions / moves out of the tracked folder) for
     // providers with a delta layer (Gmail, Microsoft). No-op for IMAP.
     await runRemovalPass(provider);
 
-    // Phase 2: Historical sync (licensed users only). Full fetch, same as
+    // Phase 2: Historical sync (all users). Full fetch, same as
     // incremental — bodies and findings land for history too. Isolated empty
-    // chunks are crossed; three consecutive empty chunks finish the walk.
-    if (licensed) {
-      const syncState = getSyncState();
-      if (
-        !syncState.historical_done &&
-        syncState.historical_cursor !== undefined
-      ) {
-        syncLog.info("Starting historical sync");
-        let hasMore = true;
-        let historicalMessages = 0;
-        let historicalChunks = 0;
-        let emptyChunks = 0;
-        while (hasMore) {
-          const result = await runHistoricalChunk(provider, syncProgress);
-          hasMore = result.hasMore;
-          historicalMessages += result.count;
-          historicalChunks++;
-          emptyChunks = result.count === 0 ? emptyChunks + 1 : 0;
-          if (hasMore && emptyChunks >= HISTORICAL_EMPTY_CHUNK_LIMIT) {
-            recomputeAllVendorFlags();
-            updateSyncState({ historical_done: 1 });
-            syncLog.info(
-              `Historical sync: no messages in ${HISTORICAL_EMPTY_CHUNK_LIMIT} consecutive chunks, stopping early`,
-            );
-            break;
-          }
+    // chunks are crossed; four consecutive empty chunks finish the walk.
+    const historicalState = getSyncState();
+    if (
+      !historicalState.historical_done &&
+      historicalState.historical_cursor !== undefined
+    ) {
+      syncLog.info("Starting historical sync");
+      let hasMore = true;
+      let historicalMessages = 0;
+      let historicalChunks = 0;
+      let emptyChunks = 0;
+      while (hasMore) {
+        const result = await runHistoricalChunk(provider, syncProgress);
+        hasMore = result.hasMore;
+        historicalMessages += result.count;
+        historicalChunks++;
+        emptyChunks = result.count === 0 ? emptyChunks + 1 : 0;
+        if (hasMore && emptyChunks >= HISTORICAL_EMPTY_CHUNK_LIMIT) {
+          recomputeAllVendorFlags();
+          updateSyncState({ historical_done: 1 });
+          syncLog.info(
+            `Historical sync: no messages in ${HISTORICAL_EMPTY_CHUNK_LIMIT} consecutive chunks, stopping early`,
+          );
+          break;
         }
-        syncLog.info(
-          `Historical sync complete: ${historicalMessages} messages in ${historicalChunks} chunks`,
-        );
       }
+      syncLog.info(
+        `Historical sync complete: ${historicalMessages} messages in ${historicalChunks} chunks`,
+      );
     }
 
     // Catalogue enrichment is global, static work. Run it once after both sync
@@ -612,7 +602,7 @@ export async function runSync(licensedOverride?: boolean): Promise<void> {
     enrichVendorCategories();
 
     // Re-derive "unsubscribed" message status after an all-mail migration re-sync.
-    maybeReapplyUnsubscribed(licensed);
+    maybeReapplyUnsubscribed();
     seedProfileEmailsFromCurrentAccount(getDb());
 
     await provider.disconnect();

@@ -1,3 +1,4 @@
+import { requirePro } from "./settings";
 import { getProvider } from "../providers/ProviderFactory";
 import { actionLog } from "../utils/log";
 
@@ -13,6 +14,7 @@ export async function sendEmail(
   body: string,
   inReplyTo?: string,
 ): Promise<SendEmailResult> {
+  requirePro();
   const recipientDomain = to.split("@")[1] || "unknown";
   try {
     const provider = getProvider();

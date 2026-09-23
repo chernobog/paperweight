@@ -19,7 +19,7 @@ import { buildMetadata } from "@/utils/seo";
 
 const title = "Pricing";
 const description =
-  "Use Paperweight free with one email account and 90 days of history, or buy a lifetime license for unlimited available history and multiple accounts.";
+  "Discover your digital footprint free with one email account and full history. Pro adds cleanup, privacy requests, multiple accounts, and MCP access.";
 
 export const metadata = buildMetadata({
   title,
@@ -30,9 +30,9 @@ export const metadata = buildMetadata({
 
 const faqItems = [
   {
-    question: "Is the free version a 90-day trial?",
+    question: "Does the free version expire?",
     answer:
-      "No. The free version does not expire. It works with one email account and scans the most recent 90 days of email history.",
+      "No. Free includes one email account and full-history sync. You can keep using it without paying.",
   },
   {
     question: "What does a lifetime license mean?",
@@ -42,7 +42,7 @@ const faqItems = [
   {
     question: "Which features are available for free?",
     answer:
-      "The free version includes account mapping, mailing-list cleanup and unsubscribe actions, breach information, and personal-data request templates. Its limits are one email account and 90 days of email history.",
+      "Free includes full-history sync for one email account, account and company discovery, mailing-list and breach overviews, personal-data findings, request templates, and local curation. Pro adds unsubscribe, trash, spam, bulk cleanup, sending privacy requests, multiple accounts, and MCP access.",
   },
   {
     question: "What support comes with a license?",
@@ -113,12 +113,23 @@ const structuredData = [
   },
 ];
 
-const sharedFeatures = [
+const freeFeatures = [
   "Account and company mapping",
-  "Mailing-list cleanup and unsubscribe actions",
+  "Mailing-list overview",
+  "Personal-data overview",
+  "Review, whitelist, and correct your data",
+  "Full-history sync",
   "Breach information",
   "Personal-data request templates",
   "Local processing on your computer",
+];
+
+const proFeatures = [
+  "Everything in Free",
+  "Unsubscribe, trash, and mark as spam",
+  "Bulk cleanup actions",
+  "Send privacy requests and follow-ups",
+  "MCP integration",
 ];
 
 export default function PricingPage() {
@@ -138,9 +149,9 @@ export default function PricingPage() {
             Start free or buy once
           </h1>
           <p className="text-xl opacity-80">
-            The free version does not expire. Buy a lifetime license when you
-            need more than one email account or more than 90 days of email
-            history.
+            Discover, inspect, and curate for free. Buy Pro once to unsubscribe,
+            clean up email, send privacy requests, connect multiple accounts,
+            and use MCP integrations.
           </p>
         </div>
       </section>
@@ -156,7 +167,7 @@ export default function PricingPage() {
                   <p className="text-sm opacity-70">No expiry</p>
                 </div>
                 <ul className="space-y-3 flex-1 mb-6">
-                  {sharedFeatures.map((feature) => (
+                  {freeFeatures.map((feature) => (
                     <li key={feature} className="flex items-start gap-2">
                       <Check
                         className="size-5 shrink-0 text-success"
@@ -177,13 +188,6 @@ export default function PricingPage() {
                       className="size-5 shrink-0 text-success"
                       aria-hidden
                     />
-                    <strong>Most recent 90 days of email history</strong>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <Check
-                      className="size-5 shrink-0 text-success"
-                      aria-hidden
-                    />
                     <span>Community support</span>
                   </li>
                 </ul>
@@ -196,7 +200,7 @@ export default function PricingPage() {
             <div className="card bg-base-100 border-2 border-primary">
               <div className="card-body p-8">
                 <div className="text-center mb-4">
-                  <h2 className="text-2xl font-bold mb-2">Lifetime license</h2>
+                  <h2 className="text-2xl font-bold mb-2">Pro lifetime license</h2>
                   <div className="text-4xl font-bold mb-2">
                     ${LICENSE_PRICING.LICENSE_PRICE}
                   </div>
@@ -205,7 +209,7 @@ export default function PricingPage() {
                   </p>
                 </div>
                 <ul className="space-y-3 flex-1 mb-6">
-                  {sharedFeatures.map((feature) => (
+                  {proFeatures.map((feature) => (
                     <li key={feature} className="flex items-start gap-2">
                       <Check
                         className="size-5 shrink-0 text-success"
@@ -220,13 +224,6 @@ export default function PricingPage() {
                       aria-hidden
                     />
                     <strong>Multiple email accounts</strong>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <Check
-                      className="size-5 shrink-0 text-success"
-                      aria-hidden
-                    />
-                    <strong>Unlimited available email history</strong>
                   </li>
                   <li className="flex items-start gap-2">
                     <Check
@@ -299,9 +296,9 @@ export default function PricingPage() {
                   <Download className="size-8 text-primary" aria-hidden />
                   <h3 className="card-title">Choose free</h3>
                   <p className="opacity-80">
-                    Use one mailbox and review recent email without a
-                    time-limited trial. Keep using it free if that covers your
-                    cleanup.
+                    Explore the full history of one mailbox. Review companies,
+                    mailing lists, breaches, and personal data. Keep items and
+                    correct your profile for free.
                   </p>
                 </div>
               </div>
@@ -310,8 +307,8 @@ export default function PricingPage() {
                   <KeyRound className="size-8 text-primary" aria-hidden />
                   <h3 className="card-title">Buy a license</h3>
                   <p className="opacity-80">
-                    Pay once when you need older available history or more than
-                    one mailbox. There is no recurring subscription.
+                    Pay once to execute cleanup, send privacy requests, connect
+                    multiple mailboxes, and use MCP. There is no recurring subscription.
                   </p>
                 </div>
               </div>
@@ -403,8 +400,8 @@ export default function PricingPage() {
               Review your email history
             </h2>
             <p className="text-lg opacity-80 mb-8">
-              Download the free version or buy once for multiple accounts and
-              unlimited available history.
+              Download Free to discover and curate your footprint. Buy Pro once
+              for cleanup, privacy requests, multiple accounts, and MCP access.
             </p>
             <div className="flex flex-wrap justify-center gap-3">
               <a

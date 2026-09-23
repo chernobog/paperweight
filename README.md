@@ -35,14 +35,14 @@ IMAP Presets: Proton, Yahoo Mail, Fastmail, Yandex, Zoho, Mailbox.org, Posteo, G
 1. Download [latest release](https://github.com/wslyvh/paperweight/releases) for your platform
 2. Connect your email
 3. Scan your inbox in ~2 minutes
-4. Start unsubscribing and deleting
+4. Review your footprint; use Pro to unsubscribe and delete emails
 
 ## License
 
-Core features available for free. Upgrade for unlimited history, multiple accounts and to support open-source software development.
+Discover, inspect, and curate your digital footprint for free. Upgrade to Pro to execute cleanup and support open-source development.
 
-- **Free tier**: 90-day email scan, core features included
-- **Perpetual license**: All features, unlimited email history, multiple email accounts, permanent use of Paperweight
+- **Free**: One email account, full-history sync, account and mailing-list discovery, breach and personal-data overviews, and local curation
+- **Pro perpetual license**: Everything in Free, plus multiple email accounts, unsubscribe, trash, spam, bulk cleanup, privacy requests, and MCP access
 
 [Buy a perpetual license and support development →](https://www.paperweight.email/#pricing)
 

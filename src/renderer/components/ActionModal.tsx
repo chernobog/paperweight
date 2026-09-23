@@ -12,6 +12,8 @@ interface ActionModalProps {
   secondaryLabel?: string;
   confirmVariant?: "primary" | "neutral" | "error" | "warning" | "success";
   secondaryVariant?: "primary" | "neutral" | "error" | "warning" | "success";
+  cancelVariant?: "ghost" | "neutral";
+  hideCancel?: boolean;
   onConfirm?: () => void | Promise<void>;
   onSecondary?: () => void | Promise<void>;
   onCancel: () => void;
@@ -39,6 +41,8 @@ export default function ActionModal({
   secondaryLabel,
   confirmVariant = "neutral",
   secondaryVariant = "warning",
+  cancelVariant = "ghost",
+  hideCancel,
   onConfirm,
   onSecondary,
   onCancel,
@@ -76,11 +80,20 @@ export default function ActionModal({
   }, [isOpen]);
 
   const handleDialogClose = () => {
-    if (!loading) onCancel();
+    if (loading) {
+      ref.current?.showModal();
+      return;
+    }
+    onCancel();
   };
 
   return (
-    <dialog ref={ref} className="modal" onClose={handleDialogClose}>
+    <dialog
+      ref={ref}
+      className="modal"
+      onCancel={(e) => { if (loading) e.preventDefault(); }}
+      onClose={handleDialogClose}
+    >
       <div className="modal-box" onClick={(e) => e.stopPropagation()}>
         <h3 className="font-bold text-lg mb-4">{title}</h3>
         <div className="text-sm text-base-content/80 space-y-3">{children}</div>
@@ -97,13 +110,15 @@ export default function ActionModal({
               <Copy className="w-4 h-4" />
             </button>
           )}
-          <button
-            className="btn btn-ghost btn-sm"
-            onClick={onCancel}
-            disabled={loading}
-          >
-            {cancelLabel}
-          </button>
+          {!hideCancel && (
+            <button
+              className={`btn btn-sm ${cancelVariant === "neutral" ? "btn-neutral" : "btn-ghost"}`}
+              onClick={() => { if (!loading) onCancel(); }}
+              disabled={loading}
+            >
+              {cancelLabel}
+            </button>
+          )}
           {secondaryLabel && (
             <button
               className={`btn btn-sm ${VARIANT_CLASS[secondaryVariant]}`}
@@ -133,7 +148,14 @@ export default function ActionModal({
         </div>
       </div>
       <form method="dialog" className="modal-backdrop">
-        <button type="submit" onClick={onCancel} disabled={loading}>
+        <button
+          type="submit"
+          disabled={loading}
+          onClick={(e) => {
+            if (loading) e.preventDefault();
+            else onCancel();
+          }}
+        >
           close
         </button>
       </form>

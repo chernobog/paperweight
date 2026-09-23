@@ -1,3 +1,4 @@
+import { useActionAccess } from "../context/LicenseContext";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import type { Vendor, VendorQuery, UnsubscribeEntry } from "@shared/types";
@@ -6,6 +7,7 @@ import { formatRelativeDate } from "@shared/formatting";
 import { parseMailto, PAPERWEIGHT_UNSUB_BODY } from "@shared/utils";
 import { ArrowUpDown, BadgeCheck, BellOff, ChevronLeft, ChevronRight, Flag, SlidersHorizontal, Trash2 } from "lucide-react";
 import ActionModal from "../components/ActionModal";
+import { MAILBOX_CHANGED, requireSameMailbox, viewedMailboxEmail } from "../hooks/useAccounts";
 
 // ---------- types ----------
 
@@ -24,6 +26,7 @@ interface ModalState {
 /** After opening an external unsubscribe link, ask the user to confirm. */
 interface UnsubCheckState {
   vendor: Vendor;
+  url: string;
   trashAlso: boolean;
   errorMessage?: string;
 }
@@ -185,6 +188,7 @@ interface MailState {
 }
 
 export default function Mail(): JSX.Element {
+  const allowAction = useActionAccess();
   const navigate = useNavigate();
   const location = useLocation();
   const locState = location.state as { preset?: MailPresetId; restore?: MailState } | null;
@@ -401,6 +405,7 @@ export default function Mail(): JSX.Element {
     vendor: Vendor,
   ): Promise<void> => {
     e.stopPropagation();
+    if (!allowAction("curate")) return;
     // Try to get a representative sender email from cached methods
     const methods = await getOrFetchMethods(vendor.id);
     const senderEmail = methods[0]?.senderEmail;
@@ -417,6 +422,7 @@ export default function Mail(): JSX.Element {
     vendor: Vendor,
   ): Promise<void> => {
     e.stopPropagation();
+    if (!allowAction("execute")) return;
     const methods = await getOrFetchMethods(vendor.id);
     setModal({
       kind: "unsubscribe",
@@ -428,17 +434,20 @@ export default function Mail(): JSX.Element {
 
   const handleSpamClick = (e: React.MouseEvent, vendor: Vendor): void => {
     e.stopPropagation();
+    if (!allowAction("execute")) return;
     setModal({ kind: "spam", vendor, whitelistTarget: "domain" });
   };
 
   const handleTrashClick = (e: React.MouseEvent, vendor: Vendor): void => {
     e.stopPropagation();
+    if (!allowAction("execute")) return;
     setModal({ kind: "trash", vendor, whitelistTarget: "domain" });
   };
 
   // ---------- batch actions ----------
 
   const openBatch = (kind: BatchKind) => {
+    if (!allowAction("execute")) return;
     setBatch({
       phase: "confirm",
       kind,
@@ -451,6 +460,7 @@ export default function Mail(): JSX.Element {
   };
 
   const runBatch = async () => {
+    if (!allowAction("execute")) return;
     if (!batch || batch.phase !== "confirm") return;
     const kind = batch.kind;
     const trashAlso = batch.trashAlso;
@@ -464,20 +474,24 @@ export default function Mail(): JSX.Element {
 
     const succeeded: number[] = [];
     const failed: string[] = [];
+    const origin = viewedMailboxEmail();
 
     for (let i = 0; i < batchVendors.length; i++) {
       setBatch((prev) => (prev ? { ...prev, current: i + 1 } : prev));
       const vendor = batchVendors[i];
       const name = vendor.name || vendor.root_domain || "Unknown";
       try {
+        requireSameMailbox(origin);
         if (kind === "unsubscribe") {
           const methods = await getOrFetchMethods(vendor.id);
           const rfc = methods.find((m) => m.method === "rfc8058");
           let success = false;
           let sentEmail = false;
+          let usedUrl: string | undefined;
           if (rfc) {
             const result = await window.api.executeRfc8058(rfc.url);
             success = result.success;
+            usedUrl = rfc.url;
           } else {
             const mailtoEntry = pickBestMailto(methods);
             if (mailtoEntry) {
@@ -489,11 +503,14 @@ export default function Mail(): JSX.Element {
               );
               success = result.success;
               sentEmail = true;
+              usedUrl = mailtoEntry.url;
             }
           }
-          if (success) {
-            await window.api.markVendorUnsubscribed(vendor.id);
+          if (success && usedUrl) {
+            requireSameMailbox(origin);
+            await window.api.markListUnsubscribed(vendor.id, usedUrl);
             if (trashAlso) {
+              requireSameMailbox(origin);
               const result = await window.api.trashVendorMessages(vendor.id, [...MARKETING_ACTION_TYPES]);
               if (!result.success) {
                 failed.push(name);
@@ -512,6 +529,7 @@ export default function Mail(): JSX.Element {
           // No throttle for rfc8058 POSTs — those are fine back-to-back.
           if (sentEmail && i < batchVendors.length - 1) {
             await new Promise((r) => setTimeout(r, 300));
+            requireSameMailbox(origin);
           }
         } else if (kind === "spam") {
           const result = await window.api.reportSpamVendor(vendor.id);
@@ -528,8 +546,14 @@ export default function Mail(): JSX.Element {
           }
           succeeded.push(vendor.id);
         }
-      } catch {
+      } catch (err) {
         failed.push(name);
+        if (err instanceof Error && err.message === MAILBOX_CHANGED) {
+          for (let j = i + 1; j < batchVendors.length; j++) {
+            failed.push(batchVendors[j].name || batchVendors[j].root_domain || "Unknown");
+          }
+          break;
+        }
       }
     }
 
@@ -551,6 +575,7 @@ export default function Mail(): JSX.Element {
   // ---------- modal confirmations ----------
 
   const handleWhitelistConfirm = async (): Promise<void> => {
+    if (!allowAction("curate")) return;
     if (!modal || modal.kind !== "whitelist") return;
     const { vendor, whitelistTarget, senderEmail } = modal;
     const target =
@@ -569,18 +594,21 @@ export default function Mail(): JSX.Element {
   };
 
   const handleUnsubscribeConfirm = async (): Promise<void> => {
+    if (!allowAction("execute")) return;
     if (!modal || modal.kind !== "unsubscribe") return;
     const { vendor, methods } = modal;
     const best = methods ? pickBestMethod(methods) : undefined;
     if (!best) return;
 
+    const origin = viewedMailboxEmail();
     setActionLoading(true);
     try {
       if (best.method === "rfc8058") {
         const fallbackMethods = (methods ?? []).filter((m) => m.method !== "rfc8058");
         const result = await window.api.executeRfc8058(best.url);
         if (result.success) {
-          await window.api.markVendorUnsubscribed(vendor.id);
+          requireSameMailbox(origin);
+          await window.api.markListUnsubscribed(vendor.id, best.url);
           setModal(null);
           setUnsubResult({ vendor, kind: "success", fallbackMethods: [], trashAlso: true });
         } else {
@@ -592,7 +620,8 @@ export default function Mail(): JSX.Element {
         const fallbackMethods = (methods ?? []).filter((m) => m.url !== best.url);
         const result = await window.api.sendEmail(to, subject, body || PAPERWEIGHT_UNSUB_BODY);
         if (result.success) {
-          await window.api.markVendorUnsubscribed(vendor.id);
+          requireSameMailbox(origin);
+          await window.api.markListUnsubscribed(vendor.id, best.url);
           setModal(null);
           setUnsubResult({ vendor, kind: "success", fallbackMethods: [], trashAlso: true });
         } else {
@@ -600,9 +629,9 @@ export default function Mail(): JSX.Element {
           setUnsubResult({ vendor, kind: "failure", fallbackMethods, trashAlso: true, errorMessage: result.error });
         }
       } else {
-        await window.api.openExternal(best.url);
+        await window.api.openUnsubscribeUrl(best.url);
         setModal(null);
-        setUnsubCheck({ vendor, trashAlso: true });
+        setUnsubCheck({ vendor, url: best.url, trashAlso: true });
       }
     } finally {
       setActionLoading(false);
@@ -610,6 +639,7 @@ export default function Mail(): JSX.Element {
   };
 
   const handleUnsubResultDone = async (): Promise<void> => {
+    if (!allowAction("execute")) return;
     if (!unsubResult) return;
     const { vendor, trashAlso } = unsubResult;
     setActionLoading(true);
@@ -632,6 +662,7 @@ export default function Mail(): JSX.Element {
   };
 
   const handleUnsubResultSpam = async (): Promise<void> => {
+    if (!allowAction("execute")) return;
     if (!unsubResult) return;
     const { vendor } = unsubResult;
     setActionLoading(true);
@@ -652,23 +683,26 @@ export default function Mail(): JSX.Element {
   };
 
   const handleUnsubResultFallback = async (entry: UnsubscribeEntry): Promise<void> => {
+    if (!allowAction("execute")) return;
     if (!unsubResult) return;
     const { vendor } = unsubResult;
+    const origin = viewedMailboxEmail();
     setActionLoading(true);
     try {
       if (entry.url.startsWith("mailto:")) {
         const { to, subject, body } = parseMailto(entry.url);
         const result = await window.api.sendEmail(to, subject, body || PAPERWEIGHT_UNSUB_BODY);
         if (result.success) {
-          await window.api.markVendorUnsubscribed(vendor.id);
+          requireSameMailbox(origin);
+          await window.api.markListUnsubscribed(vendor.id, entry.url);
           setUnsubResult({ vendor, kind: "success", fallbackMethods: [], trashAlso: unsubResult.trashAlso });
         } else {
           setToast(result.error ?? "Could not send the unsubscribe email.");
         }
       } else {
-        await window.api.openExternal(entry.url);
+        await window.api.openUnsubscribeUrl(entry.url);
         setUnsubResult(null);
-        setUnsubCheck({ vendor, trashAlso: true });
+        setUnsubCheck({ vendor, url: entry.url, trashAlso: true });
       }
     } finally {
       setActionLoading(false);
@@ -676,12 +710,16 @@ export default function Mail(): JSX.Element {
   };
 
   const handleUnsubCheckDone = async (): Promise<void> => {
+    if (!allowAction("execute")) return;
     if (!unsubCheck) return;
     const { vendor, trashAlso } = unsubCheck;
+    const origin = viewedMailboxEmail();
     setActionLoading(true);
     try {
-      await window.api.markVendorUnsubscribed(vendor.id);
+      requireSameMailbox(origin);
+      await window.api.markListUnsubscribed(vendor.id, unsubCheck.url);
       if (trashAlso) {
+        requireSameMailbox(origin);
         const result = await window.api.trashVendorMessages(vendor.id, [...MARKETING_ACTION_TYPES]);
         if (!result.success) {
           setUnsubCheck(null);
@@ -703,6 +741,7 @@ export default function Mail(): JSX.Element {
   };
 
   const handleUnsubCheckSpam = async (): Promise<void> => {
+    if (!allowAction("execute")) return;
     if (!unsubCheck) return;
     const { vendor } = unsubCheck;
     setActionLoading(true);
@@ -723,6 +762,7 @@ export default function Mail(): JSX.Element {
   };
 
   const handleSpamConfirm = async (): Promise<void> => {
+    if (!allowAction("execute")) return;
     // Called from spam modal AND from unsubscribe "no methods" modal
     if (!modal || (modal.kind !== "spam" && modal.kind !== "unsubscribe"))
       return;
@@ -744,6 +784,7 @@ export default function Mail(): JSX.Element {
   };
 
   const handleTrashConfirm = async (): Promise<void> => {
+    if (!allowAction("execute")) return;
     if (!modal || modal.kind !== "trash") return;
     const { vendor } = modal;
     setActionLoading(true);

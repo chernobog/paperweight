@@ -10,22 +10,18 @@ const {
   dbPath,
   companiesDbPath,
   breachesDbPath,
-  enforcementDbPath,
   credentials,
-  licensed,
   mode,
 } = workerData as {
   dbPath: string;
   companiesDbPath: string;
   breachesDbPath: string;
-  enforcementDbPath: string;
   credentials: StoredCredentials | null;
-  licensed: boolean;
   mode: "sync" | "profile-analysis";
 };
 
 // Initialize before any module calls getDb() or loadCredentials()
-initDb(dbPath, companiesDbPath, breachesDbPath, enforcementDbPath);
+initDb(dbPath, companiesDbPath, breachesDbPath);
 setPreloadedCredentials(credentials);
 
 setProgressEmitter((status: SyncStatus) => {
@@ -35,7 +31,7 @@ setProgressEmitter((status: SyncStatus) => {
 const run =
   mode === "profile-analysis"
     ? () => runAnalysisPass()
-    : () => runSync(licensed);
+    : () => runSync();
 
 run()
   .then(() => parentPort!.postMessage({ type: "done" }))

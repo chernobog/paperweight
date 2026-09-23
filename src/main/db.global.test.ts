@@ -40,7 +40,7 @@ describe("account database global attachment", () => {
     const userData = mkdtempSync(join(tmpdir(), "paperweight-global-attach-"));
     const accountPath = join(userData, "account.db");
 
-    initDb(accountPath, "/nonexistent", "/nonexistent", "/nonexistent");
+    initDb(accountPath, "/nonexistent", "/nonexistent");
     const target = getDb();
     expect(target.pragma("busy_timeout", { simple: true })).toBe(5000);
     expect(

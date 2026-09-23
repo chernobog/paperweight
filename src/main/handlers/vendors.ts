@@ -1,13 +1,13 @@
-import { ipcMain } from "electron";
+import { handle } from "./access";
 import { IPC } from "@shared/ipc";
 import { isString, isIntInRange } from "@shared/validation";
 import { getAccountInfo } from "../services/account";
-import { queryVendors, updateVendor, getVendorDetail, deleteVendor } from "../services/vendors";
+import { queryVendors, updateVendor, getVendorDetail } from "../services/vendors";
 import { isPiiType } from "@shared/types";
 import type { VendorQuery } from "@shared/types";
 
 export function registerVendorHandlers(): void {
-  ipcMain.handle(IPC.queryVendors, (_event, query: unknown) => {
+  handle(IPC.queryVendors, (_event, query: unknown) => {
     if (!query || typeof query !== "object") throw new Error("Invalid query");
     const q = query as Record<string, unknown>;
     if (!isIntInRange(q.page, 1, 1_000_000)) throw new Error("Invalid page");
@@ -51,23 +51,18 @@ export function registerVendorHandlers(): void {
     return { vendors: result.vendors, total: result.total };
   });
 
-  ipcMain.handle(IPC.markVendorReviewed, (_event, vendorId: unknown, reviewed: unknown) => {
+  handle(IPC.markVendorReviewed, (_event, vendorId: unknown, reviewed: unknown) => {
     if (typeof vendorId !== "number") throw new Error("Invalid vendor id");
     updateVendor(vendorId, { status: reviewed === false ? undefined : "reviewed" });
   });
 
-  ipcMain.handle(IPC.setVendorAccountEmail, (_event, vendorId: unknown, email: unknown) => {
+  handle(IPC.setVendorAccountEmail, (_event, vendorId: unknown, email: unknown) => {
     if (typeof vendorId !== "number") throw new Error("Invalid vendor id");
     if (!isString(email) || !email.includes("@")) throw new Error("Invalid email");
     updateVendor(vendorId, { account_email: email });
   });
 
-  ipcMain.handle(IPC.deleteVendor, (_event, vendorId: unknown) => {
-    if (typeof vendorId !== "number") throw new Error("Invalid vendor id");
-    deleteVendor(vendorId);
-  });
-
-  ipcMain.handle(IPC.getVendorDetail, (_event, groupKey: unknown) => {
+  handle(IPC.getVendorDetail, (_event, groupKey: unknown) => {
     if (!isString(groupKey) || !groupKey) throw new Error("Invalid group key");
     const detail = getVendorDetail(groupKey);
     let user_email: string | undefined;

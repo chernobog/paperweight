@@ -58,7 +58,7 @@ const homepageFaqItems = [
   {
     question: "What are the free version limits vs lifetime license?",
     answer:
-      "The free download allows you to scan one email account and the most recent 90 days of history with all core features included. A lifetime license unlocks unlimited history and multiple email accounts.",
+      "Free includes one email account, full-history sync, account and mailing-list discovery, breach and personal-data overviews, and local curation. A Pro lifetime license adds unsubscribe, trash, spam, bulk cleanup, sending privacy requests, multiple accounts, and MCP access.",
   },
 ] as const;
 
@@ -542,9 +542,9 @@ export default async function Home() {
               Try free or buy a lifetime license
             </h2>
             <p className="text-lg opacity-80 mb-6">
-              Scan one email account and the most recent 90 days of history for
-              free. Get a ${LICENSE_PRICING.LICENSE_PRICE} lifetime license for
-              unlimited history and multi-account support.
+              Discover and curate one email account with full history for free.
+              Get a ${LICENSE_PRICING.LICENSE_PRICE} Pro lifetime license for
+              cleanup, privacy requests, multiple accounts, and MCP access.
             </p>
             <div className="flex flex-wrap justify-center gap-3">
               <a

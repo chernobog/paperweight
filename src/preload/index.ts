@@ -21,8 +21,6 @@ const api: ElectronAPI = {
   updateServerConfig: (server) =>
     ipcRenderer.invoke(IPC.updateServerConfig, server),
 
-  testConnection: () => ipcRenderer.invoke(IPC.testConnection),
-
   getAccountInfo: () => ipcRenderer.invoke(IPC.getAccountInfo),
 
   startSync: () => ipcRenderer.invoke(IPC.startSync),
@@ -66,10 +64,11 @@ const api: ElectronAPI = {
     return () => ipcRenderer.removeListener(IPC.syncProgress, handler);
   },
 
-  markUnsubscribed: (email) => ipcRenderer.invoke(IPC.markUnsubscribed, email),
-
   markVendorUnsubscribed: (vendorId) =>
     ipcRenderer.invoke(IPC.markVendorUnsubscribed, vendorId),
+
+  markListUnsubscribed: (vendorId, url) =>
+    ipcRenderer.invoke(IPC.markListUnsubscribed, vendorId, url),
 
   markVendorReviewed: (vendorId, reviewed) =>
     ipcRenderer.invoke(IPC.markVendorReviewed, vendorId, reviewed),
@@ -84,9 +83,6 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC.removeWhitelistEntry, value),
 
   getWhitelistEntries: () => ipcRenderer.invoke(IPC.getWhitelistEntries),
-
-  getMessagesByEmail: (email, limit) =>
-    ipcRenderer.invoke(IPC.getMessagesByEmail, email, limit),
 
   getVendorMessages: (vendorId, limit) =>
     ipcRenderer.invoke(IPC.getVendorMessages, vendorId, limit),
@@ -116,9 +112,6 @@ const api: ElectronAPI = {
   getVendorDetail: (groupKey) =>
     ipcRenderer.invoke(IPC.getVendorDetail, groupKey),
 
-  deleteVendor: (vendorId) =>
-    ipcRenderer.invoke(IPC.deleteVendor, vendorId),
-
   getAllUnsubscribeMethods: (vendorId) =>
     ipcRenderer.invoke(IPC.getAllUnsubscribeMethods, vendorId),
 
@@ -143,6 +136,7 @@ const api: ElectronAPI = {
   addAccount: () => ipcRenderer.invoke(IPC.addAccount),
 
   switchAccount: (email) => ipcRenderer.invoke(IPC.switchAccount, email),
+  openUnsubscribeUrl: (url) => ipcRenderer.invoke(IPC.openUnsubscribeUrl, url),
 
   removeAccount: (email) => ipcRenderer.invoke(IPC.removeAccount, email),
 
@@ -174,6 +168,31 @@ const api: ElectronAPI = {
 
   sendEmail: (to, subject, body, inReplyTo) =>
     ipcRenderer.invoke(IPC.sendEmail, to, subject, body, inReplyTo),
+
+  sendPrivacyRequest: (
+    vendorId,
+    companyKey,
+    requestType,
+    recipientOverride,
+    accountIdentifier,
+    languageOverride,
+    sentMessageId,
+    recordOnly,
+  ) =>
+    ipcRenderer.invoke(
+      IPC.sendPrivacyRequest,
+      vendorId,
+      companyKey,
+      requestType,
+      recipientOverride,
+      accountIdentifier,
+      languageOverride,
+      sentMessageId,
+      recordOnly,
+    ),
+
+  sendCaseMessage: (caseId, action, recordOnly, sentMessageId) =>
+    ipcRenderer.invoke(IPC.sendCaseMessage, caseId, action, recordOnly, sentMessageId),
 
   createGdprCase: (input) => ipcRenderer.invoke(IPC.createGdprCase, input),
 

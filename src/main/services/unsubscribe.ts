@@ -1,16 +1,18 @@
+import { requirePro } from "./settings";
 import type { UnsubscribeEntry } from "@shared/types";
 import { PAPERWEIGHT_UNSUB_BODY, parseMailto } from "@shared/utils";
 import { actionLog } from "../utils/log";
 import { sendEmail } from "./email";
 import {
   getAllUnsubscribeMethodsForVendor,
-  markVendorUnsubscribed,
+  markListUnsubscribed,
 } from "./messages";
 
 export interface UnsubscribeResult {
   status: "unsubscribed" | "manual_required" | "not_available" | "failed";
   method?: "one_click" | "email" | "browser";
   url?: string;
+  remainingTargets?: number;
   error?: string;
 }
 
@@ -22,6 +24,10 @@ function pickBestMethod(methods: UnsubscribeEntry[]): UnsubscribeEntry | undefin
     if (entry) return entry;
   }
   return undefined;
+}
+
+function countRemainingTargets(vendorId: number): number {
+  return getAllUnsubscribeMethodsForVendor(vendorId).length;
 }
 
 function httpUnsubscribeUrl(url: string): string | undefined {
@@ -39,6 +45,7 @@ function httpUnsubscribeUrl(url: string): string | undefined {
 export async function executeRfc8058Unsubscribe(
   url: string,
 ): Promise<{ success: boolean; error?: string }> {
+  requirePro();
   if (!url.startsWith("https://")) {
     return { success: false, error: "One-click unsubscribe requires HTTPS." };
   }
@@ -59,22 +66,33 @@ export async function executeRfc8058Unsubscribe(
 }
 
 export async function unsubscribeVendor(vendorId: number): Promise<UnsubscribeResult> {
+  requirePro();
   const entry = pickBestMethod(getAllUnsubscribeMethodsForVendor(vendorId));
-  if (!entry) return { status: "not_available" };
+  if (!entry) return { status: "not_available", remainingTargets: 0 };
 
   if (entry.method === "rfc8058") {
     const result = await executeRfc8058Unsubscribe(entry.url);
     if (!result.success) {
       return { status: "failed", method: "one_click", error: result.error };
     }
-    markVendorUnsubscribed(vendorId);
-    return { status: "unsubscribed", method: "one_click" };
+    markListUnsubscribed(vendorId, entry.url);
+    return {
+      status: "unsubscribed",
+      method: "one_click",
+      url: entry.url,
+      remainingTargets: countRemainingTargets(vendorId),
+    };
   }
 
   if (!entry.url.toLowerCase().startsWith("mailto:")) {
     const url = httpUnsubscribeUrl(entry.url);
-    if (!url) return { status: "not_available" };
-    return { status: "manual_required", method: "browser", url };
+    if (!url) return { status: "not_available", remainingTargets: countRemainingTargets(vendorId) };
+    return {
+      status: "manual_required",
+      method: "browser",
+      url,
+      remainingTargets: countRemainingTargets(vendorId),
+    };
   }
 
   const { to, subject, body } = parseMailto(entry.url);
@@ -86,6 +104,11 @@ export async function unsubscribeVendor(vendorId: number): Promise<UnsubscribeRe
   if (!sent.success) {
     return { status: "failed", method: "email", error: sent.error };
   }
-  markVendorUnsubscribed(vendorId);
-  return { status: "unsubscribed", method: "email" };
+  markListUnsubscribed(vendorId, entry.url);
+  return {
+    status: "unsubscribed",
+    method: "email",
+    url: entry.url,
+    remainingTargets: countRemainingTargets(vendorId),
+  };
 }

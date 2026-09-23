@@ -1,5 +1,5 @@
-import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { HashRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useState } from "react";
 import type { LicenseStatus } from "@shared/types";
 import type { UpdateInfo } from "@shared/ipc";
 import AppShell from "./components/AppShell";
@@ -50,8 +50,22 @@ function AuthGate({ children }: { children: React.ReactNode }): JSX.Element {
   );
 }
 
+function AccountSwitchReset({ onReset }: { onReset: () => void }): null {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    return window.api.onAccountSwitched(() => {
+      navigate("/dashboard", { replace: true });
+      onReset();
+    });
+  }, [navigate, onReset]);
+
+  return null;
+}
+
 export default function App(): JSX.Element {
   const [accountKey, setAccountKey] = useState(0);
+  const resetAccountTree = useCallback(() => setAccountKey((k) => k + 1), []);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [paperweightEgg, setPaperweightEgg] = useState(false);
 
@@ -89,20 +103,15 @@ export default function App(): JSX.Element {
   }, []);
 
   useEffect(() => {
-    return window.api.onAccountSwitched(() => {
-      window.location.reload();
-    });
-  }, []);
-
-  useEffect(() => {
     return window.api.onNoAccountsRemaining(() => {
       window.location.hash = "#/onboarding";
-      setAccountKey((k) => k + 1);
+      resetAccountTree();
     });
-  }, []);
+  }, [resetAccountTree]);
 
   return (
     <HashRouter>
+      <AccountSwitchReset onReset={resetAccountTree} />
       <div
         className={
           paperweightEgg ? "animate-[shake_0.5s_ease-in-out_2]" : undefined
@@ -124,11 +133,10 @@ export default function App(): JSX.Element {
         <Routes>
           <Route path="/onboarding" element={<Onboarding />} />
           <Route
-            key={accountKey}
             path="/"
             element={
               <AuthGate>
-                <AppShell />
+                <AppShell key={accountKey} />
               </AuthGate>
             }
           >

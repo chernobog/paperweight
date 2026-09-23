@@ -181,13 +181,13 @@ export function getImpactStats(d: Database.Database = getDb()): ImpactStats {
     `SELECT
       SUM(CASE WHEN action_type = 'unsubscribed' THEN 1 ELSE 0 END) as lists_unsubscribed,
       SUM(CASE WHEN action_type IN ('trashed', 'spam_reported') THEN message_count ELSE 0 END) as emails_deleted,
-      COALESCE(SUM(size_bytes), 0) as data_reclaimed_bytes
+      COALESCE(SUM(CASE WHEN action_type IN ('trashed', 'spam_reported') THEN message_count ELSE 0 END), 0) as emails_deleted
      FROM action_log`
-  ).get() as { lists_unsubscribed: number | null; emails_deleted: number | null; data_reclaimed_bytes: number };
+  ).get() as { lists_unsubscribed: number | null; emails_deleted: number | null };
   return {
     listsUnsubscribed: row.lists_unsubscribed ?? 0,
     emailsDeleted: row.emails_deleted ?? 0,
-    dataReclaimedBytes: row.data_reclaimed_bytes,
+    dataReclaimedBytes: 0,
   };
 }
 

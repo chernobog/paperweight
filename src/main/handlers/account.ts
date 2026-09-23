@@ -1,3 +1,5 @@
+import { handle } from "./access";
+import { switchToAccount } from "../services/accountView";
 import { app, BrowserWindow, ipcMain } from "electron";
 import { readFileSync, existsSync, unlinkSync } from "fs";
 import { join } from "path";
@@ -12,7 +14,6 @@ import {
   saveImapConfigAndRecordAccount,
   startGmailAuthAndRecordAccount,
   startMicrosoftAuthAndRecordAccount,
-  testCurrentConnection,
   updateServerConfig,
   trashMessage,
   markMessageAsSpam,
@@ -37,7 +38,6 @@ import {
   loadCredentials,
   listAccounts,
   getActiveEmail,
-  setActiveEmail,
   removeAccountEntry,
   emailToFileKey,
 } from "../credentials";
@@ -107,36 +107,34 @@ function isImapConfig(value: unknown): value is ImapConfig {
 export function registerAccountHandlers(): void {
   // --- Auth & connection ---
 
-  ipcMain.handle(IPC.getConnectionStatus, () => getConnectionStatus());
+  handle(IPC.getConnectionStatus, () => getConnectionStatus());
 
   // openInBrowser defaults to true; the onboarding "copy link" path passes false
   // so the auth URL is copied to the clipboard instead of auto-opened.
-  ipcMain.handle(IPC.startGmailAuth, (_event, intent: unknown, openInBrowser: unknown) => {
+  handle(IPC.startGmailAuth, (_event, intent: unknown, openInBrowser: unknown) => {
     if (!isAccountAuthIntent(intent)) throw new Error("Invalid account auth intent");
     return startGmailAuthAndRecordAccount(intent, openInBrowser !== false);
   });
 
-  ipcMain.handle(IPC.startMicrosoftAuth, (_event, intent: unknown, openInBrowser: unknown) => {
+  handle(IPC.startMicrosoftAuth, (_event, intent: unknown, openInBrowser: unknown) => {
     if (!isAccountAuthIntent(intent)) throw new Error("Invalid account auth intent");
     return startMicrosoftAuthAndRecordAccount(intent, openInBrowser !== false);
   });
 
-  ipcMain.handle(IPC.saveImapConfig, (_event, intent: unknown, config: unknown) => {
+  handle(IPC.saveImapConfig, (_event, intent: unknown, config: unknown) => {
     if (!isAccountAuthIntent(intent)) throw new Error("Invalid account auth intent");
     if (!isImapConfig(config)) throw new Error("Invalid IMAP config");
     return saveImapConfigAndRecordAccount(intent, config);
   });
 
-  ipcMain.handle(IPC.updateServerConfig, (_event, server: unknown) => {
+  handle(IPC.updateServerConfig, (_event, server: unknown) => {
     if (!isServerConfigInput(server)) throw new Error("Invalid server config");
     return updateServerConfig(server);
   });
 
-  ipcMain.handle(IPC.testConnection, () => testCurrentConnection());
+  handle(IPC.getAccountInfo, () => getAccountInfo());
 
-  ipcMain.handle(IPC.getAccountInfo, () => getAccountInfo());
-
-  ipcMain.handle(IPC.getEmailConnection, () => getEmailConnection());
+  handle(IPC.getEmailConnection, () => getEmailConnection());
 
   // --- Multi-account management ---
 
@@ -144,7 +142,7 @@ export function registerAccountHandlers(): void {
   // Intentionally two-step: this returns immediately so the renderer can show
   // the license modal inline, then the actual auth IPC (startGmailAuth etc.)
   // is called separately once the user is cleared to proceed.
-  ipcMain.handle(IPC.addAccount, () => {
+  handle(IPC.addAccount, () => {
     const existing = listAccounts();
     if (existing.length >= 1) {
       const license = getLicenseStatus();
@@ -166,26 +164,20 @@ export function registerAccountHandlers(): void {
     }));
   });
 
-  ipcMain.handle(IPC.switchAccount, (_event, email: unknown) => {
+  handle(IPC.switchAccount, (_event, email: unknown) => {
     if (!isString(email) || !email.trim()) throw new Error("Invalid email");
     if (!listAccounts().some((a) => a.email === email)) throw new Error("Account not found");
     if (email === getActiveEmail()) return;
 
-    setActiveEmail(email as string);
-
-    const newDbPath = join(app.getPath("userData"), `${emailToFileKey(email as string)}.db`);
-    reconnectDb(newDbPath);
+    // Open the next database before changing the sync account. switchToAccount
+    // restores the previous connection if opening fails and notifies the renderer.
+    switchToAccount(email);
     ensureAccountSettingsInDb();
 
-    // Refresh all accounts with the newly active one first.
     startAllSyncs();
-
-    for (const win of BrowserWindow.getAllWindows()) {
-      win.webContents.send(IPC.accountSwitched, email);
-    }
   });
 
-  ipcMain.handle(IPC.removeAccount, async (_event, email: unknown) => {
+  handle(IPC.removeAccount, async (_event, email: unknown) => {
     if (!isString(email) || !email.trim()) throw new Error("Invalid email");
     if (!listAccounts().some((a) => a.email === email)) throw new Error("Account not found");
     const activeEmail = getActiveEmail();
@@ -213,7 +205,7 @@ export function registerAccountHandlers(): void {
       if (isActive && existsSync(accountDbPath)) {
         try {
           reconnectDb(accountDbPath);
-          ensureAccountSettingsInDb();
+          if (isActive) ensureAccountSettingsInDb();
         } catch {
           // The fixed error below is authoritative and carries no personal path.
         }
@@ -248,17 +240,17 @@ export function registerAccountHandlers(): void {
 
   // --- Email actions ---
 
-  ipcMain.handle(IPC.trashMessage, (_event, messageId: unknown) => {
+  handle(IPC.trashMessage, (_event, messageId: unknown) => {
     if (!isString(messageId)) throw new Error("Invalid message ID");
     return trashMessage(messageId);
   });
 
-  ipcMain.handle(IPC.markMessageAsSpam, (_event, messageId: unknown) => {
+  handle(IPC.markMessageAsSpam, (_event, messageId: unknown) => {
     if (!isString(messageId)) throw new Error("Invalid message ID");
     return markMessageAsSpam(messageId);
   });
 
-  ipcMain.handle(
+  handle(
     IPC.markMessageAsRead,
     (_event, messageId: unknown, isRead: unknown) => {
       if (!isString(messageId)) throw new Error("Invalid message ID");
@@ -267,7 +259,7 @@ export function registerAccountHandlers(): void {
     }
   );
 
-  ipcMain.handle(IPC.trashVendorMessages, (_event, vendorId: unknown, types: unknown) => {
+  handle(IPC.trashVendorMessages, (_event, vendorId: unknown, types: unknown) => {
     if (typeof vendorId !== "number") throw new Error("Invalid vendor id");
     if (types !== undefined && (!Array.isArray(types) || !types.every(isMessageType))) throw new Error("Invalid types");
     const narrowedTypes = Array.isArray(types) ? (types as MessageType[]) : undefined;
@@ -275,7 +267,7 @@ export function registerAccountHandlers(): void {
     return trashVendorMessages(vendorId, narrowedTypes);
   });
 
-  ipcMain.handle(IPC.reportSpamVendor, (_event, vendorId: unknown) => {
+  handle(IPC.reportSpamVendor, (_event, vendorId: unknown) => {
     if (typeof vendorId !== "number") throw new Error("Invalid vendor id");
     actionLog.info(`Report spam vendor: vendor ${vendorId}`);
     return spamVendorMessages(vendorId);
@@ -283,19 +275,19 @@ export function registerAccountHandlers(): void {
 
   // --- Sync ---
 
-  ipcMain.handle(IPC.startSync, () => {
+  handle(IPC.startSync, () => {
     startAllSyncs();
   });
 
-  ipcMain.handle(IPC.getSyncStatus, () => getSyncStatus());
+  handle(IPC.getSyncStatus, () => getSyncStatus(getActiveEmail()));
 
-  ipcMain.handle(IPC.resyncData, async () => {
+  handle(IPC.resyncData, async () => {
     dataLog.warn("Re-sync data requested");
     await stopSync(); // stops active account's worker
     clearSyncData();
   });
 
-  ipcMain.handle(IPC.wipeData, async () => {
+  handle(IPC.wipeData, async () => {
     dataLog.warn("Wipe ALL data requested");
     const accounts = listAccounts();
     const userData = app.getPath("userData");
@@ -332,7 +324,7 @@ export function registerAccountHandlers(): void {
 
   // --- Support / diagnostics ---
 
-  ipcMain.handle(IPC.getSupportInfo, (): SupportInfo => {
+  handle(IPC.getSupportInfo, (): SupportInfo => {
     const creds = loadCredentials();
     const license = getLicenseStatus();
     const stats = getDashboardStats();
@@ -354,9 +346,9 @@ export function registerAccountHandlers(): void {
     };
   });
 
-  ipcMain.handle(IPC.getStorageBreakdown, () => getStorageBreakdown());
+  handle(IPC.getStorageBreakdown, () => getStorageBreakdown());
 
-  ipcMain.handle(
+  handle(
     IPC.sendEmail,
     async (_event, to: unknown, subject: unknown, body: unknown, inReplyTo?: unknown) => {
       if (!isString(to) || !to.includes("@")) throw new Error("Invalid recipient");
@@ -367,7 +359,7 @@ export function registerAccountHandlers(): void {
     },
   );
 
-  ipcMain.handle(IPC.readLogFile, () => {
+  handle(IPC.readLogFile, () => {
     const logPath = getFileLogPath() || join(app.getPath("logs"), "main.log");
     try {
       return readFileSync(logPath, "utf-8");

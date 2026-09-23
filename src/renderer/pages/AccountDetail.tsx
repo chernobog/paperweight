@@ -1,3 +1,4 @@
+import { useActionAccess } from "../context/LicenseContext";
 import { useEffect, useCallback, useState } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import type {
@@ -42,6 +43,8 @@ import { CaseListRow } from "../components/CaseListRow";
 import FoundInEmails from "../components/FoundInEmails";
 import { canAccountSend } from "../utils/account";
 import { errText } from "../utils/errText";
+import { isGdprSendRecovery, type GdprSendRecovery } from "../utils/gdprSendRecovery";
+import { requireSameMailbox, viewedMailboxEmail } from "../hooks/useAccounts";
 import { APP_CONFIG } from "@shared/config";
 import {
   ACTION_COLORS,
@@ -238,6 +241,7 @@ function WhitelistSection({
 }
 
 export default function AccountDetail(): JSX.Element {
+  const allowAction = useActionAccess();
   const { groupKey } = useParams<{ groupKey: string }>();
   const navigate = useNavigate();
   const location = useLocation();
@@ -290,8 +294,9 @@ export default function AccountDetail(): JSX.Element {
   const [selectedWhitelistValues, setSelectedWhitelistValues] = useState<Set<string>>(new Set());
   const [whitelistLoading, setWhitelistLoading] = useState(false);
   const [whitelistEntries, setWhitelistEntries] = useState<WhitelistEntry[]>([]);
-  const [gdprSendOpen, setGdprSendOpen] = useState(false);
+  const [gdprSendOpen, setGdprSendOpen] = useState<"send" | "record">();
   const [gdprSendError, setGdprSendError] = useState<string>();
+  const [pendingGdprRecord, setPendingGdprRecord] = useState<GdprSendRecovery>();
   const [vendorCases, setVendorCases] = useState<GdprCaseSummary[]>([]);
   const [canSend, setCanSend] = useState(true);
 
@@ -310,8 +315,9 @@ export default function AccountDetail(): JSX.Element {
     setDeleteError(undefined);
     setWhitelistModalOpen(false);
     setSelectedWhitelistValues(new Set());
-    setGdprSendOpen(false);
+    setGdprSendOpen(undefined);
     setGdprSendError(undefined);
+    setPendingGdprRecord(undefined);
     setVendorCases([]);
     Promise.all([
       window.api.getVendorDetail(decodeURIComponent(groupKey)),
@@ -414,6 +420,7 @@ export default function AccountDetail(): JSX.Element {
   const isLastInList = !accountNav || (accountNav.currentIndex === accountNav.groupKeys.length - 1 && accountNav.vendorQuery.page >= Math.ceil(accountNav.total / accountNav.vendorQuery.limit));
 
   const handleToggleReviewed = async () => {
+    if (!allowAction("curate")) return;
     if (!detail) return;
     const newValue = detail.vendor.status !== "reviewed";
     await window.api.markVendorReviewed(detail.vendor.id, newValue);
@@ -600,8 +607,10 @@ export default function AccountDetail(): JSX.Element {
     for (const msg of detail.bulkMessages) {
       const method = msg.unsubscribe_method;
       const url = msg.unsubscribe_url;
-      if (!method || method === "none" || !url || seen.has(method)) continue;
-      seen.add(method);
+      if (!method || method === "none" || !url) continue;
+      const key = url.replace(/^<|>$/g, "").trim();
+      if (seen.has(key)) continue;
+      seen.add(key);
       result.push({ url, method, senderEmail: msg.sender_email });
     }
     return result;
@@ -629,7 +638,7 @@ export default function AccountDetail(): JSX.Element {
 
   const actionItems: string[] = [
     ...(anyLikelyAffected ? ["breachReview", "breachAccess", "breachDeletion"] : []),
-    ...(hasActiveSubscription ? unsubMethods.map((m) => `unsub-${m.method}`) : []),
+    ...(hasActiveSubscription ? unsubMethods.map((m) => `unsub-${m.url}`) : []),
     ...(showDeleteMarketing ? ["deleteMarketing"] : []),
     ...(showDeleteAll ? ["deleteAll"] : []),
     ...((isAncientAccount && !anyLikelyAffected) ? ["checkActive"] : []),
@@ -637,17 +646,19 @@ export default function AccountDetail(): JSX.Element {
   ];
 
   function unsubEntryForId(id: string): UnsubscribeEntry | undefined {
-    const method = id.replace(/^unsub-/, "");
-    return unsubMethods.find((m) => m.method === method);
+    const url = id.replace(/^unsub-/, "");
+    return unsubMethods.find((m) => m.url === url);
   }
 
   function handleItemAction(id: string) {
     if (id.startsWith("unsub-")) {
       const entry = unsubEntryForId(id);
       if (!entry) return;
+      if (!allowAction("execute")) return;
       setActiveItemId(id);
       setPendingUnsub(entry);
     } else if (id === "deleteMarketing" || id === "deleteAll") {
+      if (!allowAction("execute")) return;
       setActiveItemId(id);
       setDeleteError(undefined);
       setPendingDelete(id === "deleteAll" ? "all" : "marketing");
@@ -663,9 +674,11 @@ export default function AccountDetail(): JSX.Element {
   }
 
   const handleUnsubscribeConfirm = async (): Promise<void> => {
+    if (!allowAction("execute")) return;
     if (!pendingUnsub || !detail) return;
     const entry = pendingUnsub;
     const vendorId = detail.vendor.id;
+    const origin = viewedMailboxEmail();
     setActionLoading(true);
     try {
       if (entry.method === "rfc8058") {
@@ -675,7 +688,8 @@ export default function AccountDetail(): JSX.Element {
         const result = await window.api.executeRfc8058(entry.url);
         setPendingUnsub(null);
         if (result.success) {
-          await window.api.markVendorUnsubscribed(vendorId);
+          requireSameMailbox(origin);
+          await window.api.markListUnsubscribed(vendorId, entry.url);
           setUnsubResult({
             entry,
             kind: "success",
@@ -697,7 +711,8 @@ export default function AccountDetail(): JSX.Element {
         const result = await window.api.sendEmail(to, subject, body || PAPERWEIGHT_UNSUB_BODY);
         setPendingUnsub(null);
         if (result.success) {
-          await window.api.markVendorUnsubscribed(vendorId);
+          requireSameMailbox(origin);
+          await window.api.markListUnsubscribed(vendorId, entry.url);
           setUnsubResult({
             entry,
             kind: "success",
@@ -714,7 +729,7 @@ export default function AccountDetail(): JSX.Element {
           });
         }
       } else {
-        await window.api.openExternal(entry.url);
+        await window.api.openUnsubscribeUrl(entry.url);
         setPendingUnsub(null);
         setUnsubCheck({ entry, trashAlso: true });
       }
@@ -724,6 +739,7 @@ export default function AccountDetail(): JSX.Element {
   };
 
   const handleUnsubResultDone = async (): Promise<void> => {
+    if (!allowAction("execute")) return;
     if (!unsubResult || !detail) return;
     const { entry, trashAlso } = unsubResult;
     setActionLoading(true);
@@ -739,7 +755,7 @@ export default function AccountDetail(): JSX.Element {
         }
       }
       setUnsubResult(null);
-      setDoneIds((prev) => new Set(prev).add(`unsub-${entry.method}`));
+      setDoneIds((prev) => new Set(prev).add(`unsub-${entry.url}`));
       setActiveItemId(null);
       await refreshDetail();
     } finally {
@@ -748,6 +764,7 @@ export default function AccountDetail(): JSX.Element {
   };
 
   const handleUnsubResultSpam = async (): Promise<void> => {
+    if (!allowAction("execute")) return;
     if (!unsubResult || !detail) return;
     const { entry } = unsubResult;
     setActionLoading(true);
@@ -761,7 +778,7 @@ export default function AccountDetail(): JSX.Element {
         return;
       }
       setUnsubResult(null);
-      setDoneIds((prev) => new Set(prev).add(`unsub-${entry.method}`));
+      setDoneIds((prev) => new Set(prev).add(`unsub-${entry.url}`));
       setActiveItemId(null);
       await refreshDetail();
     } finally {
@@ -772,15 +789,18 @@ export default function AccountDetail(): JSX.Element {
   const handleUnsubResultFallback = async (
     fallbackEntry: UnsubscribeEntry,
   ): Promise<void> => {
+    if (!allowAction("execute")) return;
     if (!unsubResult || !detail) return;
     const { entry } = unsubResult;
+    const origin = viewedMailboxEmail();
     setActionLoading(true);
     try {
       if (fallbackEntry.url.startsWith("mailto:")) {
         const { to, subject, body } = parseMailto(fallbackEntry.url);
         const result = await window.api.sendEmail(to, subject, body || PAPERWEIGHT_UNSUB_BODY);
         if (result.success) {
-          await window.api.markVendorUnsubscribed(detail.vendor.id);
+          requireSameMailbox(origin);
+          await window.api.markListUnsubscribed(detail.vendor.id, fallbackEntry.url);
           setUnsubResult({
             entry,
             kind: "success",
@@ -795,7 +815,7 @@ export default function AccountDetail(): JSX.Element {
           });
         }
       } else {
-        await window.api.openExternal(fallbackEntry.url);
+        await window.api.openUnsubscribeUrl(fallbackEntry.url);
         setUnsubResult(null);
         setUnsubCheck({ entry, trashAlso: true });
       }
@@ -805,12 +825,16 @@ export default function AccountDetail(): JSX.Element {
   };
 
   const handleUnsubCheckDone = async (): Promise<void> => {
+    if (!allowAction("execute")) return;
     if (!unsubCheck || !detail) return;
     const { entry, trashAlso } = unsubCheck;
+    const origin = viewedMailboxEmail();
     setActionLoading(true);
     try {
-      await window.api.markVendorUnsubscribed(detail.vendor.id);
+      requireSameMailbox(origin);
+      await window.api.markListUnsubscribed(detail.vendor.id, entry.url);
       if (trashAlso) {
+        requireSameMailbox(origin);
         const result = await window.api.trashVendorMessages(detail.vendor.id, [...MARKETING_ACTION_TYPES]);
         if (!result.success) {
           setUnsubCheck(null);
@@ -825,7 +849,7 @@ export default function AccountDetail(): JSX.Element {
         }
       }
       setUnsubCheck(null);
-      setDoneIds((prev) => new Set(prev).add(`unsub-${entry.method}`));
+      setDoneIds((prev) => new Set(prev).add(`unsub-${entry.url}`));
       setActiveItemId(null);
       await refreshDetail();
     } finally {
@@ -834,6 +858,7 @@ export default function AccountDetail(): JSX.Element {
   };
 
   const handleUnsubCheckSpam = async (): Promise<void> => {
+    if (!allowAction("execute")) return;
     if (!unsubCheck || !detail) return;
     const { entry } = unsubCheck;
     setActionLoading(true);
@@ -847,7 +872,7 @@ export default function AccountDetail(): JSX.Element {
         return;
       }
       setUnsubCheck(null);
-      setDoneIds((prev) => new Set(prev).add(`unsub-${entry.method}`));
+      setDoneIds((prev) => new Set(prev).add(`unsub-${entry.url}`));
       setActiveItemId(null);
       await refreshDetail();
     } finally {
@@ -856,6 +881,7 @@ export default function AccountDetail(): JSX.Element {
   };
 
   const handleDeleteConfirm = async (): Promise<void> => {
+    if (!allowAction("execute")) return;
     if (!pendingDelete || !detail) return;
     setActionLoading(true);
     try {
@@ -878,6 +904,7 @@ export default function AccountDetail(): JSX.Element {
   };
 
   const handleOpenWhitelistModal = (): void => {
+    if (!allowAction("curate")) return;
     if (!canOpenWhitelistModal) return;
     setSelectedWhitelistValues(new Set());
     setWhitelistModalOpen(true);
@@ -896,6 +923,7 @@ export default function AccountDetail(): JSX.Element {
   };
 
   const handleWhitelistConfirm = async (): Promise<void> => {
+    if (!allowAction("curate")) return;
     if (selectedWhitelistValues.size === 0) return;
     setWhitelistLoading(true);
     try {
@@ -913,6 +941,7 @@ export default function AccountDetail(): JSX.Element {
   };
 
   const handleWhitelistRemove = async (value: string): Promise<void> => {
+    if (!allowAction("curate")) return;
     setWhitelistLoading(true);
     try {
       await window.api.removeWhitelistEntry(value);
@@ -926,6 +955,7 @@ export default function AccountDetail(): JSX.Element {
   // the new value: React has not re-rendered yet, so requesterEmail still holds
   // the old one at that point.
   const persistAccountEmail = async (address?: string): Promise<void> => {
+    if (!allowAction("curate")) return;
     if (!detail) return;
     const next = (address ?? requesterEmail).trim();
     // Validate what is about to be saved, not what the field held before it.
@@ -939,43 +969,85 @@ export default function AccountDetail(): JSX.Element {
     });
   };
 
-  const handleGdprSend = async (): Promise<void> => {
+  const handleRecordRequest = async (): Promise<void> => {
+    if (!allowAction("curate")) return;
     const email = dataRequestType === "access" ? accessEmail : deletionEmail;
     if (!email || !recipientEmail || !detail || !canBuildRequest) return;
     setActionLoading(true);
     setGdprSendError(undefined);
     try {
+      await persistAccountEmail();
+      const created = await window.api.createGdprCase({
+        vendorId: detail.vendor.id,
+        requestType: dataRequestType,
+        recipientEmail,
+        subject: email.subject,
+        body: email.body,
+      });
+      setGdprSendOpen(undefined);
+      navigate(`/cases/${created.id}`);
+    } catch (err) {
+      setGdprSendError(errText(err, "Could not record the sent request."));
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleGdprSend = async (): Promise<void> => {
+    if (!allowAction("execute")) return;
+    const email = dataRequestType === "access" ? accessEmail : deletionEmail;
+    if (!email || !recipientEmail || !detail || !canBuildRequest || !groupKey) return;
+    const recovering = isGdprSendRecovery(pendingGdprRecord, groupKey, dataRequestType);
+    const origin = viewedMailboxEmail();
+    setActionLoading(true);
+    setGdprSendError(undefined);
+    try {
       try {
+        requireSameMailbox(origin);
         await persistAccountEmail();
       } catch (err) {
         setGdprSendError(errText(err, "Could not save the account email."));
         return;
       }
-      const result = await window.api.sendEmail(recipientEmail, email.subject, email.body);
-      if (!result.success) {
-        setGdprSendError(result.error ?? "Could not send the request.");
+      requireSameMailbox(origin);
+      const result = await window.api.sendPrivacyRequest(
+        detail.vendor.id,
+        decodeURIComponent(groupKey),
+        dataRequestType,
+        recipientEmail,
+        accountIdentifier || undefined,
+        emailLanguage,
+        recovering ? pendingGdprRecord.messageId : undefined,
+        recovering,
+      );
+      if (result.status === "failed") {
+        setGdprSendError("Could not send the request.");
         return;
       }
-      // The request email is already out. If opening the case fails, tell the
-      // user plainly instead of silently proceeding — otherwise they'd resend
-      // and mail the company twice.
-      let created;
-      try {
-        created = await window.api.createGdprCase({
-          vendorId: detail.vendor.id,
+      if (result.status === "no_recipient" || result.status === "active_case_exists") {
+        setGdprSendError(
+          result.status === "active_case_exists"
+            ? "An active request of this type already exists."
+            : "No recipient is available.",
+        );
+        return;
+      }
+      if (result.status === "sent_case_failed") {
+        setPendingGdprRecord({
+          groupKey,
           requestType: dataRequestType,
-          recipientEmail,
-          sentMessageId: result.messageId,
-          subject: email.subject,
-          body: email.body,
+          messageId: result.messageId,
         });
-      } catch (err) {
-        const detail = err instanceof Error && err.message ? `: ${err.message}` : "";
-        setGdprSendError(`Request sent, but opening the case failed${detail}. Don't resend.`);
+        setGdprSendError("Request sent, but opening the case failed. Don't resend.");
         return;
       }
-      setGdprSendOpen(false);
-      navigate(`/cases/${created.id}`);
+      if (result.status !== "sent" || result.caseId === undefined) {
+        setGdprSendError("Could not send the request.");
+        return;
+      }
+      setGdprSendOpen(undefined);
+      setPendingGdprRecord(undefined);
+      navigate(`/cases/${result.caseId}`);
     } catch (err) {
       setGdprSendError(errText(err, "Could not send the request."));
     } finally {
@@ -1352,7 +1424,7 @@ export default function AccountDetail(): JSX.Element {
                 />
               )}
               {hasActiveSubscription && unsubMethods.map((entry) => {
-                const id = `unsub-${entry.method}`;
+                const id = `unsub-${entry.url}`;
                 return (
                   <ActionTaskRow
                     key={id}
@@ -1596,7 +1668,11 @@ export default function AccountDetail(): JSX.Element {
                       <button
                         className="btn btn-primary btn-sm"
                         disabled={!recipientEmail || !canBuildRequest || actionLoading || !canSend}
-                        onClick={() => { setGdprSendError(undefined); setGdprSendOpen(true); }}
+                        onClick={() => {
+                          if (!allowAction("execute")) return;
+                          setGdprSendError(undefined);
+                          setGdprSendOpen("send");
+                        }}
                       >
                         Send request
                       </button>
@@ -1606,6 +1682,17 @@ export default function AccountDetail(): JSX.Element {
                       >
                         {copiedField === "body" ? <span className="text-success">✓</span> : <Clipboard className="w-3.5 h-3.5" />}
                         {copiedField === "body" ? "Copied!" : "Copy message"}
+                      </button>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        disabled={!recipientEmail || !canBuildRequest || actionLoading}
+                        onClick={() => {
+                          if (!allowAction("curate")) return;
+                          setGdprSendError(undefined);
+                          setGdprSendOpen("record");
+                        }}
+                      >
+                        I sent this today
                       </button>
                     </div>
                     {!canSend && (
@@ -1646,7 +1733,7 @@ export default function AccountDetail(): JSX.Element {
         <div className={`tab-content mt-2 rounded-box bg-base-100/50 w-full px-4 py-3 ${activeTab === "cases" ? "!block" : ""}`}>
           {vendorCases.length === 0 ? (
             <p className="text-sm text-base-content/50">
-              No cases yet. Send a data request from the Data requests tab to start tracking.
+              No cases yet. Send or record a request in the Data requests tab to start tracking.
             </p>
           ) : (
             <div className="space-y-2">
@@ -1873,19 +1960,34 @@ export default function AccountDetail(): JSX.Element {
       {gdprSendOpen && (
         <ActionModal
           isOpen
-          title={dataRequestType === "access" ? "Send access request" : "Send deletion request"}
-          confirmLabel="Send"
+          title={gdprSendOpen === "record" ? "Record sent request" : dataRequestType === "access" ? "Send access request" : "Send deletion request"}
+          confirmLabel={
+            isGdprSendRecovery(pendingGdprRecord, groupKey, dataRequestType) || gdprSendOpen === "record"
+              ? "Record request"
+              : "Send"
+          }
           confirmVariant="primary"
-          onConfirm={handleGdprSend}
-          onCancel={() => { if (!actionLoading) setGdprSendOpen(false); }}
+          onConfirm={gdprSendOpen === "record" ? handleRecordRequest : handleGdprSend}
+          onCancel={() => { if (!actionLoading) { setGdprSendOpen(undefined); } }}
           loading={actionLoading}
           error={gdprSendError}
         >
-          <p>
-            Paperweight will send this request from your account to{" "}
-            <strong>{recipientEmail}</strong> and open a case to track the
-            response deadlines.
-          </p>
+          {gdprSendOpen === "record" ? (
+            <p>
+              Confirm that you sent the displayed request to <strong>{recipientEmail}</strong> today.
+              Paperweight will save a local case with today as the request date.
+            </p>
+          ) : (
+            <p>
+              {isGdprSendRecovery(pendingGdprRecord, groupKey, dataRequestType)
+                ? <>The request was sent to <strong>{recipientEmail}</strong>. Recording it locally failed — retry recording only, don't send again.</>
+                : <>
+              Paperweight will send this request from your account to{" "}
+              <strong>{recipientEmail}</strong> and open a case to track the
+              response deadlines.
+                </>}
+            </p>
+          )}
         </ActionModal>
       )}
 
@@ -1917,7 +2019,7 @@ export default function AccountDetail(): JSX.Element {
           onCancel={() => {
             if (!actionLoading) {
               if (!unsubResult.errorMessage) {
-                setDoneIds((prev) => new Set(prev).add(`unsub-${unsubResult.entry.method}`));
+                setDoneIds((prev) => new Set(prev).add(`unsub-${unsubResult.entry.url}`));
               }
               setUnsubResult(null);
               setActiveItemId(null);

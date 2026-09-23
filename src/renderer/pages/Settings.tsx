@@ -3,7 +3,6 @@ import { useLocation, useNavigate } from "react-router-dom";
 import makeBlockie from "ethereum-blockies-base64";
 import { HelpCircle, Lock, Moon, Sun } from "lucide-react";
 import {
-  FREE_TIER_SYNC_DAYS,
   type AccountInfo,
   type AgentAccess,
   type EmailConnection,
@@ -11,8 +10,14 @@ import {
   type McpSetup,
   type WhitelistEntry,
 } from "@shared/types";
+import { APP_CONFIG } from "@shared/config";
 import { formatBytes } from "@shared/formatting";
-import { useLicense, useRefreshLicense } from "../context/LicenseContext";
+import {
+  useLicense,
+  useRefreshLicense,
+  useActionAccess,
+  PRO_UPGRADE_BODY,
+} from "../context/LicenseContext";
 import {
   ProviderSelect,
   GmailConnect,
@@ -54,6 +59,7 @@ export default function Settings(): JSX.Element {
   const [showResyncModal, setShowResyncModal] = useState(false);
   const [licenseKey, setLicenseKey] = useState("");
   const license = useLicense();
+  const allowAction = useActionAccess();
   const refreshLicense = useRefreshLicense();
   const [licenseLoading, setLicenseLoading] = useState(false);
   const [licenseError, setLicenseError] = useState("");
@@ -77,6 +83,7 @@ export default function Settings(): JSX.Element {
     useState<AddAccountView>("provider");
   const [addAccountCopyFirst, setAddAccountCopyFirst] = useState(false);
   const licenseSectionRef = useRef<HTMLDivElement>(null);
+  const accountsSectionRef = useRef<HTMLDivElement>(null);
 
   const mcpConfig = mcpSetup?.server
     ? JSON.stringify({ mcpServers: { paperweight: mcpSetup.server } }, null, 2)
@@ -99,14 +106,26 @@ export default function Settings(): JSX.Element {
   }, [location.pathname]);
 
   useEffect(() => {
-    const state = location.state as { openServerSettings?: boolean } | null;
-    if (state?.openServerSettings) {
+    const state = location.state as {
+      openServerSettings?: boolean;
+      scrollToLicense?: boolean;
+      scrollToAccounts?: boolean;
+    } | null;
+    if (!state?.openServerSettings && !state?.scrollToLicense && !state?.scrollToAccounts) return;
+    if (state.openServerSettings) {
       setShowServerSettings(true);
-      navigate(location.pathname, { replace: true, state: null });
     }
+    if (state.scrollToLicense) {
+      licenseSectionRef.current?.scrollIntoView({ behavior: "auto", block: "start" });
+    }
+    if (state.scrollToAccounts) {
+      accountsSectionRef.current?.scrollIntoView({ behavior: "auto", block: "start" });
+    }
+    navigate(location.pathname, { replace: true, state: null });
   }, [location, navigate]);
 
   const handleAddEntry = async (): Promise<void> => {
+    if (!allowAction("curate")) return;
     const value = newEntry.trim().toLowerCase();
     if (!value) return;
     if (!value.includes(".")) return;
@@ -116,6 +135,7 @@ export default function Settings(): JSX.Element {
   };
 
   const handleRemoveWhitelistEntry = async (value: string): Promise<void> => {
+    if (!allowAction("curate")) return;
     await window.api.removeWhitelistEntry(value);
     fetchWhitelist();
   };
@@ -132,7 +152,6 @@ export default function Settings(): JSX.Element {
         setLicenseError("Invalid or expired license key.");
       } else {
         setLicenseKey("");
-        window.api.startSync();
       }
     } catch (err) {
       setLicenseError(err instanceof Error ? err.message : "Activation failed");
@@ -144,9 +163,11 @@ export default function Settings(): JSX.Element {
   const handleDeactivateLicense = async (): Promise<void> => {
     await window.api.deactivateLicense();
     await refreshLicense();
+    refreshAccounts();
   };
 
   const handleResync = async (): Promise<void> => {
+    if (!allowAction("curate")) return;
     await window.api.resyncData();
     setShowResyncModal(false);
     window.api.startSync();
@@ -306,7 +327,7 @@ export default function Settings(): JSX.Element {
       </div>
 
       {/* Section 1: Accounts */}
-      <div className="card bg-base-200">
+      <div id="accounts" ref={accountsSectionRef} className="card bg-base-200">
         <div className="card-body space-y-3">
           <h3 className="font-semibold">Accounts</h3>
           <div className="space-y-2">
@@ -389,7 +410,7 @@ export default function Settings(): JSX.Element {
             </button>
             {needsLicense && (
               <span className="text-xs text-base-content/50">
-                *requires a license
+                Requires Pro
               </span>
             )}
             <button
@@ -404,9 +425,11 @@ export default function Settings(): JSX.Element {
       </div>
 
       {/* Section 2: License */}
-      <div ref={licenseSectionRef} className="card bg-base-200">
+      <div id="license" ref={licenseSectionRef} className="card bg-base-200">
         <div className="card-body space-y-4">
-          <h3 className="font-semibold">License</h3>
+          <h3 className="font-semibold">
+            {license.active ? "License" : "Upgrade to Pro"}
+          </h3>
 
           {account && (
             <>
@@ -452,9 +475,9 @@ export default function Settings(): JSX.Element {
                   </div>
                 </div>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <p className="text-sm text-base-content/60">
-                    Activate a license key to unlock full email history sync and multi-account support.
+                    {PRO_UPGRADE_BODY}
                   </p>
                   <div className="flex gap-2">
                     <input
@@ -483,9 +506,9 @@ export default function Settings(): JSX.Element {
                     <p className="text-xs text-error">{licenseError}</p>
                   )}
                   <button
-                    className="btn btn-ghost btn-sm w-fit"
+                    className="btn btn-primary btn-sm w-fit"
                     onClick={() =>
-                      window.api.openExternal("https://paperweight.email")
+                      window.api.openExternal(`${APP_CONFIG.WEBSITE}/pricing`)
                     }
                   >
                     Buy License
@@ -520,7 +543,7 @@ export default function Settings(): JSX.Element {
                 <span>{account.totalMessages.toLocaleString()}</span>
 
                 <span className="text-base-content/50">Sync period</span>
-                <span>{license.active ? "Full history" : `${FREE_TIER_SYNC_DAYS} days`}</span>
+                <span>Full history</span>
               </div>
 
               {(account.providerType === "gmail" ||
@@ -597,7 +620,7 @@ export default function Settings(): JSX.Element {
         <div className="card-body space-y-3">
           <h3 className="font-semibold">AI Agent access (experimental)</h3>
           <p className="text-sm text-base-content/60">
-            Choose what MCP clients can do with Paperweight.
+            MCP access requires Pro. Choose what connected agents can do with Paperweight.
           </p>
 
           <div
@@ -637,8 +660,8 @@ export default function Settings(): JSX.Element {
               }}
             >
               <option value="off">Off</option>
-              <option value="read">Read only</option>
-              <option value="actions">Read &amp; write</option>
+              <option value="read" disabled={!license.active}>Read only</option>
+              <option value="actions" disabled={!license.active}>Read &amp; write</option>
             </select>
           </label>
           {agentAccess === "actions" ? (

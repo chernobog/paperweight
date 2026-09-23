@@ -15,6 +15,7 @@ import {
   migrateActionLog,
   migrateGdprCases,
   migrateMessages,
+  migrateSyncState,
   migrateVendors,
 } from "./migrations";
 
@@ -23,14 +24,12 @@ let db: Database.Database | undefined;
 let _dbPath: string | undefined;
 let _companiesDbPath: string | undefined;
 let _breachesDbPath: string | undefined;
-let _enforcementDbPath: string | undefined;
 
 
-export function initDb(dbPath: string, companiesDbPath: string, breachesDbPath: string, enforcementDbPath: string): void {
+export function initDb(dbPath: string, companiesDbPath: string, breachesDbPath: string): void {
   _dbPath = dbPath;
   _companiesDbPath = companiesDbPath;
   _breachesDbPath = breachesDbPath;
-  _enforcementDbPath = enforcementDbPath;
   configureGlobalForAccountDb(dbPath);
 }
 
@@ -68,17 +67,6 @@ function getBreachesDbPath(): string {
     : join(process.resourcesPath, "breaches.db");
 }
 
-function getEnforcementDbPath(): string {
-  if (_enforcementDbPath) return _enforcementDbPath;
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { app } = require("electron") as typeof import("electron");
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { is } = require("@electron-toolkit/utils") as typeof import("@electron-toolkit/utils");
-  return is.dev
-    ? join(app.getAppPath(), "resources", "enforcement.db")
-    : join(process.resourcesPath, "enforcement.db");
-}
-
 export function getDb(): Database.Database {
   if (db) return db;
   const dbPath = getDbPath();
@@ -90,7 +78,6 @@ export function getDb(): Database.Database {
     initSchema(next);
     attachCompaniesDb(next);
     attachBreachesDb(next);
-    attachEnforcementDb(next);
     attachGlobalDb(next);
     const tag = basename(dbPath, ".db").split("_").pop() ?? "?";
     dbLog.info(`Database initialized [${tag}]`);
@@ -114,7 +101,6 @@ export function withAccountDbReadConnection<T>(
     initSchema(database);
     attachCompaniesDb(database);
     attachBreachesDb(database);
-    attachEnforcementDb(database);
     database.pragma("query_only = ON");
     return read(database);
   } finally {
@@ -139,7 +125,6 @@ export function createAccountDb(dbPath: string): void {
   initSchema(newDb);
   attachCompaniesDb(newDb);
   attachBreachesDb(newDb);
-  attachEnforcementDb(newDb);
   newDb.close();
   const tag = basename(dbPath, ".db").split("_").pop() ?? "?";
   dbLog.info(`Account DB created [${tag}]`);
@@ -241,6 +226,7 @@ function initSchema(d: Database.Database) {
       id INTEGER PRIMARY KEY DEFAULT 1,
       last_sync_at INTEGER,
       next_page_token TEXT,
+      page_since INTEGER,
       quick_sync_done_at INTEGER,
       historical_cursor INTEGER,
       historical_done INTEGER DEFAULT 0,
@@ -283,6 +269,7 @@ function initSchema(d: Database.Database) {
   migrateVendors(d);
   migrateGdprCases(d);
   migrateMessages(d);
+  migrateSyncState(d);
 
   d.prepare("INSERT OR IGNORE INTO sync_state (id) VALUES (1)").run();
 }
@@ -303,15 +290,6 @@ function attachBreachesDb(d: Database.Database) {
     return;
   }
   d.exec(`ATTACH DATABASE '${breachesPath}' AS breaches`);
-}
-
-function attachEnforcementDb(d: Database.Database) {
-  const enforcementPath = getEnforcementDbPath();
-  if (!existsSync(enforcementPath)) {
-    dbLog.warn(`Enforcement DB not found at ${enforcementPath} — skipping attach`);
-    return;
-  }
-  d.exec(`ATTACH DATABASE '${enforcementPath}' AS enforcement`);
 }
 
 function deleteSqliteFiles(dbPath: string): void {
