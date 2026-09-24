@@ -22,7 +22,7 @@ A small number of services verify whether your data is publicly listed on a brok
 
 **Privacy track record.** Several large players have documented conflicts of interest or partnerships with the data broker industry they claim to remove you from. Mozilla cited "the realities of the data broker ecosystem" when it shut down its Monitor Plus service in late 2025.
 
-**Pricing model.** Most services charge $100 to $200 per year on monthly or annual subscriptions. This is a periodic-cleanup task, not something people do daily or monthly. Recurring SaaS billing is a poor fit for how people actually use these tools. One-time pricing and free DIY routes match the use case better.
+**Pricing model.** Most services charge $100 to $200 per year on monthly or annual subscriptions. This is a periodic-cleanup task, not something people do daily or monthly. A short-term pass suits occasional cleanup, while annual access suits ongoing work. Free DIY routes are another option.
 
 **Geographic coverage.** Most services are US-focused. If you are in the EU, GDPR already gives you a direct legal route to demand deletion, and the broker problem looks different. Several US-only services do not operate in the EU at all.
 
@@ -193,7 +193,7 @@ What remains is free Mozilla Monitor, which checks your email against Have I Bee
 | Kanary           | ~$120–$200              | Monthly app subscription| Add-on      | No         |
 | Privacy Bee      | $197                    | Annual                  | Yes         | Limited    |
 | Mozilla Monitor  | Free (breach alerts)    | N/A                     | N/A         | Yes        |
-| **Paperweight**  | **$69**                 | **One-time, lifetime** | **N/A**     | **Yes**    |
+| **Paperweight**  | **$25 pass / $60 year**                 | **30 days or annual** | **N/A**     | **Yes**    |
 
 *Prices might differ. We'll try to update, but services often run aggressive first-year discounts; second-year renewal prices are typically the figures above.
 
@@ -224,7 +224,7 @@ Everything runs on your machine. Email content, credentials, and connection deta
 
 **Licensing and pricing**
 
-Free includes one email account, full-history sync, account and mailing-list discovery, breach and personal-data overviews, and local curation. The Pro lifetime license adds unsubscribe, trash, spam, bulk cleanup, sending privacy requests, multiple accounts, and MCP access. No subscriptions. The licensing model exists to support open-source development and ready-made builds without locking customers into recurring billing. Recurring fees do not fit how people actually use a tool like this, which is more like a periodic cleanup than daily or monthly use.
+Free includes one email account, full-history sync, account and mailing-list discovery, breach and personal-data overviews, and local curation. Pro adds unsubscribe, trash, spam, bulk cleanup, sending privacy requests, multiple accounts, and MCP access. Choose a $25 Cleanup Pass for 30 days or Paperweight Pro at $60/year ($5/month, billed yearly). Crypto costs $55 for one year of Pro with manual renewal, or $25 for a Cleanup Pass.
 
 ## Limitations
 

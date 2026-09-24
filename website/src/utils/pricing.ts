@@ -1,25 +1,79 @@
-import { IRL_CONFIG } from "@/utils/irl";
+const CHECKOUT_URL =
+  "https://polar.sh/checkout/polar_c_TeFn9VeBGNbi2ZLaL94v3vxTHi9Vo7vKcpBIb3eoYan";
 
-export const LICENSE_PRICING = {
-  LICENSE_PRICE: 69,
-  CRYPTO_PRICE: 59,
+export const PLANS = {
+  annual: {
+    name: "Paperweight Pro",
+    price: 60,
+    cryptoPrice: 55,
+    productId: "0c74b8ca-6492-42c9-867f-659617203246",
+  },
+  cleanup: {
+    name: "Cleanup Pass",
+    price: 25,
+    cryptoPrice: 25,
+    productId: "e6f951f0-4655-400b-8b14-06d81e5a1d62",
+  },
+  lifetime: {
+    name: "Early-supporter Lifetime",
+    price: 99,
+    cryptoPrice: 90,
+    productId: "84eecff9-fce2-4395-bd21-867543559f11",
+  },
 } as const;
 
-export function getCryptoPrice() {
-  return IRL_CONFIG.EVENT_ACTIVE
-    ? IRL_CONFIG.EVENT_CRYPTO_PRICE
-    : LICENSE_PRICING.CRYPTO_PRICE;
+export function checkoutUrl(plan: keyof typeof PLANS) {
+  return `${CHECKOUT_URL}?product_id=${PLANS[plan].productId}`;
 }
 
-export function getCryptoPayPricing() {
-  const priceUsd = getCryptoPrice();
-
-  if (IRL_CONFIG.EVENT_ACTIVE) {
-    return {
-      priceUsd,
-      eventLabel: IRL_CONFIG.EVENT_LABEL,
-    };
-  }
-
-  return { priceUsd };
+export function getCryptoPayPricing(plan: keyof typeof PLANS = "annual") {
+  return {
+    priceUsd: PLANS[plan].cryptoPrice,
+    planName: PLANS[plan].name,
+    duration:
+      plan === "annual" ? "1 year" : plan === "cleanup" ? "30 days" : "life",
+    renewal:
+      plan === "annual"
+        ? "One payment for one year. Renew manually by contacting us."
+        : plan === "cleanup"
+          ? "One payment for 30 days. No subscription or renewal."
+          : "One payment for permanent Pro access. No renewal.",
+  };
 }
+
+// Lifetime sales end after October 7, 2026, in Europe/Amsterdam.
+export const LIFETIME_SALES_ENDS_AT = Date.parse("2026-10-08T00:00:00+02:00");
+
+export function isLifetimeAvailable(now = Date.now()) {
+  return now < LIFETIME_SALES_ENDS_AT;
+}
+
+export const STANDARD_OFFERS = [
+  {
+    "@type": "Offer",
+    name: "Free",
+    price: 0,
+    priceCurrency: "USD",
+    url: "https://www.paperweight.email/#download",
+  },
+  {
+    "@type": "Offer",
+    name: "Paperweight Pro - billed yearly",
+    price: PLANS.annual.price,
+    priceCurrency: "USD",
+    url: checkoutUrl("annual"),
+    priceSpecification: {
+      "@type": "UnitPriceSpecification",
+      price: PLANS.annual.price,
+      priceCurrency: "USD",
+      billingDuration: "P1Y",
+    },
+  },
+  {
+    "@type": "Offer",
+    name: "Cleanup Pass - 30 days",
+    price: PLANS.cleanup.price,
+    priceCurrency: "USD",
+    url: checkoutUrl("cleanup"),
+  },
+];

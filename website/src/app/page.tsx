@@ -21,7 +21,7 @@ import Link from "next/link";
 import { getLatestVersion } from "@/lib/github";
 import { getBreachIndexItems } from "@/utils/breach";
 import { ORGANIZATION_SCHEMA, SITE_CONFIG } from "@/utils/config";
-import { getCryptoPrice, LICENSE_PRICING } from "@/utils/pricing";
+import { checkoutUrl, STANDARD_OFFERS } from "@/utils/pricing";
 import { buildMetadata } from "@/utils/seo";
 
 const title = "Manage Your Digital Footprint";
@@ -56,9 +56,9 @@ const homepageFaqItems = [
       "Paperweight supports Gmail, Outlook, Proton Mail via Proton Bridge, and standard IMAP email accounts.",
   },
   {
-    question: "What are the free version limits vs lifetime license?",
+    question: "What is included in Free and Pro?",
     answer:
-      "Free includes one email account, full-history sync, account and mailing-list discovery, breach and personal-data overviews, and local curation. A Pro lifetime license adds unsubscribe, trash, spam, bulk cleanup, sending privacy requests, multiple accounts, and MCP access.",
+      "Free includes one email account, full-history sync, account and mailing-list discovery, breach and personal-data overviews, and local curation. Pro adds unsubscribe, trash, spam, bulk cleanup, sending privacy requests, multiple accounts, and MCP access.",
   },
 ] as const;
 
@@ -72,29 +72,7 @@ const structuredData = [
     operatingSystem: "macOS, Windows, Linux",
     url: SITE_CONFIG.URL,
     description,
-    offers: [
-      {
-        "@type": "Offer",
-        name: "Free",
-        price: 0,
-        priceCurrency: "USD",
-        url: `${SITE_CONFIG.URL}/#download`,
-      },
-      {
-        "@type": "Offer",
-        name: "Lifetime license via Polar",
-        price: LICENSE_PRICING.LICENSE_PRICE,
-        priceCurrency: "USD",
-        url: SITE_CONFIG.LICENSE_URL,
-      },
-      {
-        "@type": "Offer",
-        name: "Lifetime license paid with crypto",
-        price: getCryptoPrice(),
-        priceCurrency: "USD",
-        url: `${SITE_CONFIG.URL}/pricing`,
-      },
-    ],
+    offers: STANDARD_OFFERS,
   },
   {
     "@context": "https://schema.org",
@@ -317,8 +295,8 @@ export default async function Home() {
                 <div>
                   <h3 className="font-semibold">The walk-away test</h3>
                   <p className="text-sm opacity-80 mt-1">
-                    Zero lock-ins. No servers to maintain, no subscriptions, and
-                    a lifetime license that works permanently.
+                    Your email stays on your computer. Discover and curate for free,
+                    then choose Pro when you want to take action.
                   </p>
                 </div>
               </div>
@@ -539,12 +517,12 @@ export default async function Home() {
         <div className="container mx-auto px-4">
           <div className="max-w-3xl mx-auto text-center">
             <h2 className="text-3xl font-bold mb-4">
-              Try free or buy a lifetime license
+              Free gives you the full picture
             </h2>
             <p className="text-lg opacity-80 mb-6">
               Discover and curate one email account with full history for free.
-              Get a ${LICENSE_PRICING.LICENSE_PRICE} Pro lifetime license for
-              cleanup, privacy requests, multiple accounts, and MCP access.
+              Pro lets you act on it. Choose $5/month, billed yearly at $60,
+              or a $25 Cleanup Pass for 30 days of full Pro access.
             </p>
             <div className="flex flex-wrap justify-center gap-3">
               <a
@@ -552,14 +530,15 @@ export default async function Home() {
                 className="btn btn-primary"
                 data-umami-event="Buy License"
               >
-                Buy Lifetime License
+                Get Paperweight Pro
               </a>
+              <a href={checkoutUrl("cleanup")} className="btn btn-outline">Get Cleanup Pass</a>
               <Link href="/pricing" className="btn btn-soft">
                 View pricing details
               </Link>
             </div>
             <p className="text-xs opacity-60 mt-4">
-              *Early supporter pricing, limited until V1 release.
+              Crypto: $55 for one year of Pro, renewed manually, or $25 for a Cleanup Pass.
             </p>
           </div>
         </div>

@@ -575,9 +575,11 @@ export type SettingsUpdate = Partial<Settings> & {
   confirmAgentUnmask?: boolean;
 };
 
+export type LicenseTier = "pro" | "lifetime" | "cleanup";
+
 export interface LicenseStatus {
   active: boolean;
-  tier?: "test" | "lifetime";
+  tier?: LicenseTier;
   expiresAt?: string;
   key?: string;
   portalUrl?: string;

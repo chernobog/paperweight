@@ -60,7 +60,7 @@ const faqItems: FaqItem[] = [
   {
     question: "Can I manage subscriptions across multiple accounts?",
     answer:
-      "Yes. With a lifetime license, you can connect multiple Gmail, Outlook, Proton Bridge, or IMAP inboxes and triage mailing lists across all of them.",
+      "Yes. With Pro, you can connect multiple Gmail, Outlook, Proton Bridge, or IMAP inboxes and triage mailing lists across all of them.",
   },
   {
     question: "Does Paperweight upload or share my email data?",
@@ -212,7 +212,7 @@ export default function EmailCleanupPage() {
         body="Discover and curate your footprint free with one email account and full history. Pro adds cleanup, privacy requests, multiple accounts, and MCP access."
         primaryAction={{
           href: SITE_CONFIG.LICENSE_URL,
-          label: "Buy a license",
+          label: "Get Paperweight Pro",
           className: "btn btn-primary",
           analyticsEvent: "Buy License",
         }}

@@ -217,7 +217,7 @@ export default function AccountDiscoveryPage() {
         body="Discover and curate your footprint free with one email account and full history. Pro adds cleanup, privacy requests, multiple accounts, and MCP access."
         primaryAction={{
           href: SITE_CONFIG.LICENSE_URL,
-          label: "Buy Lifetime License",
+          label: "Get Paperweight Pro",
           className: "btn btn-primary",
           analyticsEvent: "Buy License",
         }}

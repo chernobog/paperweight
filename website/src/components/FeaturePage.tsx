@@ -52,7 +52,7 @@ export function FeatureHero(props: FeatureHeroProps) {
               className="btn btn-soft btn-lg"
               data-umami-event="Buy License"
             >
-              Buy a license
+              Get Paperweight Pro
             </a>
           </div>
           <p className="mt-4 text-sm opacity-70">macOS · Windows · Linux</p>
@@ -218,8 +218,8 @@ export function FeatureTrustSummary() {
               <div>
                 <h3 className="font-semibold">The walk-away test</h3>
                 <p className="text-sm opacity-80 mt-1">
-                  Zero lock-ins. No servers to maintain, no subscriptions, and a
-                  lifetime license that works permanently.
+                  Your email stays on your computer. Discover and curate for free,
+                  then choose Pro when you want to take action.
                 </p>
               </div>
             </div>

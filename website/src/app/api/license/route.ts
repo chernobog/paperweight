@@ -1,10 +1,38 @@
+import type { LicenseTier } from "@shared/types";
+
 export const runtime = "nodejs";
 
 const POLAR_API_VERSION = "2026-10";
 
+interface LicenseBenefit {
+  tier: LicenseTier;
+  requiresExpiry: boolean;
+}
+
+const LICENSE_BENEFITS: Record<string, LicenseBenefit> = {
+  // Polar omits expiry for subscription grants; one-time crypto grants use TTL.
+  "d117b32b-f60e-4739-908b-ffc36e2cc523": {
+    tier: "pro",
+    requiresExpiry: false,
+  },
+  "26df0e3e-07fe-4f23-9bf4-2ee387e2c6b4": {
+    tier: "cleanup",
+    requiresExpiry: true,
+  },
+  "19517682-fe41-46e4-b1e7-97d0c8c8607a": {
+    tier: "lifetime",
+    requiresExpiry: false,
+  },
+  "be8f9c70-8a07-4e51-9d56-932e52bd9631": {
+    tier: "pro",
+    requiresExpiry: false,
+  },
+};
+
 interface PolarValidateResponse {
   status?: string;
-  expires_at?: string | null;
+  expires_at?: string;
+  benefit_id?: string;
   customer_id?: string;
 }
 
@@ -21,14 +49,17 @@ function asPolarValidateResponse(value: unknown): PolarValidateResponse {
   const v = value as Record<string, unknown>;
 
   const status = typeof v.status === "string" ? v.status : undefined;
-  const expiresAt =
-    typeof v.expires_at === "string" || v.expires_at === null
-      ? (v.expires_at as string | null)
-      : undefined;
+  const expiresAt = typeof v.expires_at === "string" ? v.expires_at : undefined;
+  const benefitId = typeof v.benefit_id === "string" ? v.benefit_id : undefined;
   const customerId =
     typeof v.customer_id === "string" ? v.customer_id : undefined;
 
-  return { status, expires_at: expiresAt, customer_id: customerId };
+  return {
+    status,
+    expires_at: expiresAt,
+    customer_id: customerId,
+    benefit_id: benefitId,
+  };
 }
 
 function polarHeaders(apiKey: string) {
@@ -94,21 +125,17 @@ export async function POST(request: Request) {
     );
 
     const responseText = await response.text();
-    const details =
-      responseText.length > 0
-        ? (safeParseJson(responseText) ?? responseText)
-        : undefined;
 
     if (!response.ok) {
       // Treat common "invalid key" failures as a normal (non-throwing) result.
       // Everything else is a service/config problem (bad token, wrong org id, etc.)
       if (response.status === 404 || response.status === 422) {
-        return Response.json({ valid: false, details }, { status: 200 });
+        return Response.json({ valid: false }, { status: 200 });
       }
 
-      console.error("Polar API error:", response.status, details);
+      console.error("Polar API error:", response.status);
       return Response.json(
-        { valid: false, error: "License validation failed", details },
+        { valid: false, error: "License validation failed" },
         { status: 502 },
       );
     }
@@ -119,11 +146,16 @@ export async function POST(request: Request) {
     const status = data.status;
     const expiresAtRaw = data.expires_at ?? undefined;
 
-    // Check expiration
-    const now = new Date();
-    const expiresAt = expiresAtRaw ? new Date(expiresAtRaw) : null;
-    const isExpired = expiresAt ? expiresAt < now : false;
-    const isValid = status === "granted" && !isExpired;
+    const benefit =
+      data.benefit_id && Object.hasOwn(LICENSE_BENEFITS, data.benefit_id)
+        ? LICENSE_BENEFITS[data.benefit_id]
+        : undefined;
+    const isExpired =
+      expiresAtRaw !== undefined && !(Date.parse(expiresAtRaw) > Date.now());
+    // Paid time-limited plans must never become permanent if Polar omits expiry.
+    const missingExpiry = benefit?.requiresExpiry && !expiresAtRaw;
+    const isValid =
+      status === "granted" && !!benefit && !isExpired && !missingExpiry;
 
     // Generate customer portal URL if valid
     let portalUrl: string | undefined;
@@ -136,7 +168,7 @@ export async function POST(request: Request) {
       expiresAt: expiresAtRaw, // ISO string (if present)
       status, // 'granted' or 'revoked'
       isExpired,
-      tier: expiresAtRaw ? "test" : "lifetime",
+      tier: benefit?.tier,
       portalUrl,
     });
   } catch (error) {

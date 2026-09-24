@@ -32,7 +32,7 @@ A smaller set of tools process locally on your own machine. Nothing is uploaded.
 
 **Privacy track record.** The two largest free tools in this category have documented histories of monetizing inbox data. For a privacy-leaning audience, that history is the reason they are looking elsewhere.
 
-**Pricing model.** Inbox cleanup is mostly a periodic task. Recurring subscriptions fit poorly with how people actually use these tools, which is closer to an occasional cleanup than daily software. One-time and credit-based pricing match the use case better.
+**Pricing model.** Inbox cleanup is mostly a periodic task. Short-term passes suit occasional cleanup. Annual plans suit people who want to keep taking action throughout the year.
 
 **What unsubscribe means.** People who discover their "unsubscribe" tool has only been filtering mail into a folder, while the senders kept mailing and kept their data, tend to go looking for something that does the real thing.
 
@@ -179,7 +179,7 @@ AgainstData is the closest tool to Paperweight on function rather than architect
 | Mailstrom        | ~$60/year               | Subscription             | Partial          | No               | Yes        |
 | AgainstData      | ~$40/year               | Subscription             | Deletion         | No               | Yes        |
 | GoodByEmail      | One-time license        | One-time                 | Yes              | Yes              | Yes        |
-| **Paperweight**  | **Free / $69 one-time** | **One-time, lifetime**  | **Yes + deletion** | **Yes**        | **Yes**    |
+| **Paperweight**  | **Free / $25 pass / $60 year** | **30 days or annual**  | **Yes + deletion** | **Yes**        | **Yes**    |
 
 Prices might differ. GoodByEmail and Leave Me Alone pricing should be confirmed against their own sites before publishing.
 
@@ -218,7 +218,7 @@ If you are weighing a local-first option and do not need deletion requests, Good
 
 **Licensing and pricing**
 
-Free includes one email account, full-history sync, account and mailing-list discovery, breach and personal-data overviews, and local curation. The Pro lifetime license adds unsubscribe, trash, spam, bulk cleanup, sending privacy requests, multiple accounts, and MCP access. No subscriptions. The licensing model exists to support open-source development and ready-made builds without locking customers into recurring billing. Recurring fees do not fit how people actually use a tool like this, which is more like a periodic cleanup than daily use.
+Free includes one email account, full-history sync, account and mailing-list discovery, breach and personal-data overviews, and local curation. Pro adds unsubscribe, trash, spam, bulk cleanup, sending privacy requests, multiple accounts, and MCP access. Choose a $25 Cleanup Pass for 30 days or Paperweight Pro at $60/year ($5/month, billed yearly). Crypto costs $55 for one year of Pro with manual renewal, or $25 for a Cleanup Pass.
 
 ## Limitations
 

@@ -1,423 +1,362 @@
-import {
-  Check,
-  Coins,
-  Download,
-  KeyRound,
-  Laptop,
-  Mail,
-  RefreshCw,
-} from "lucide-react";
-import Link from "next/link";
+import { Check, Search, ShieldCheck, WandSparkles } from "lucide-react";
 import { PayWithCryptoButton } from "@/components/PayWithCrypto";
 import { SITE_CONFIG } from "@/utils/config";
 import {
+  checkoutUrl,
   getCryptoPayPricing,
-  getCryptoPrice,
-  LICENSE_PRICING,
+  isLifetimeAvailable,
+  PLANS,
+  STANDARD_OFFERS,
 } from "@/utils/pricing";
 import { buildMetadata } from "@/utils/seo";
 
-const title = "Pricing";
-const description =
-  "Discover your digital footprint free with one email account and full history. Pro adds cleanup, privacy requests, multiple accounts, and MCP access.";
+// Evaluate the launch cutoff on each request, including after a deployment.
+export const dynamic = "force-dynamic";
 
+const description =
+  "Free gives you the full picture. Pro lets you act on it. Get Paperweight Pro for $60/year or a 30-Day Cleanup Pass for $25.";
 export const metadata = buildMetadata({
-  title,
+  title: "Pricing",
   description,
   path: "/pricing",
   imageAlt: "Paperweight pricing",
 });
 
-const faqItems = [
-  {
-    question: "Does the free version expire?",
-    answer:
-      "No. Free includes one email account and full-history sync. You can keep using it without paying.",
-  },
-  {
-    question: "What does a lifetime license mean?",
-    answer:
-      "Your license does not expire. The version you bought remains available without a subscription or Paperweight-hosted service. The license includes updates through the first major release, v1. A future major version can require a new license.",
-  },
-  {
-    question: "Which features are available for free?",
-    answer:
-      "Free includes full-history sync for one email account, account and company discovery, mailing-list and breach overviews, personal-data findings, request templates, and local curation. Pro adds unsubscribe, trash, spam, bulk cleanup, sending privacy requests, multiple accounts, and MCP access.",
-  },
-  {
-    question: "What support comes with a license?",
-    answer:
-      "A license includes one year of email support. Community support remains available for the free version.",
-  },
-  {
-    question: "How can I pay?",
-    answer:
-      "You can use the Polar checkout or pay with supported cryptocurrencies. The crypto flow supports Ethereum and stablecoins, Bitcoin, Zcash, Monero, and more cross-chain options through Fluidkey.",
-  },
-] as const;
-
-const structuredData = [
-  {
-    "@context": "https://schema.org",
-    "@type": "BreadcrumbList",
-    itemListElement: [
-      { "@type": "ListItem", position: 1, name: "Home", item: SITE_CONFIG.URL },
-      {
-        "@type": "ListItem",
-        position: 2,
-        name: "Pricing",
-        item: `${SITE_CONFIG.URL}/pricing`,
-      },
-    ],
-  },
-  {
-    "@context": "https://schema.org",
-    "@type": "SoftwareApplication",
-    name: SITE_CONFIG.NAME,
-    applicationCategory: "UtilitiesApplication",
-    operatingSystem: "macOS, Windows, Linux",
-    url: `${SITE_CONFIG.URL}/pricing`,
-    description,
-    offers: [
-      {
-        "@type": "Offer",
-        name: "Free",
-        price: 0,
-        priceCurrency: "USD",
-        url: `${SITE_CONFIG.URL}/#download`,
-      },
-      {
-        "@type": "Offer",
-        name: "Lifetime license via Polar",
-        price: LICENSE_PRICING.LICENSE_PRICE,
-        priceCurrency: "USD",
-        url: SITE_CONFIG.LICENSE_URL,
-      },
-      {
-        "@type": "Offer",
-        name: "Lifetime license paid with crypto",
-        price: getCryptoPrice(),
-        priceCurrency: "USD",
-        url: `${SITE_CONFIG.URL}/pricing`,
-      },
-    ],
-  },
-  {
-    "@context": "https://schema.org",
-    "@type": "FAQPage",
-    mainEntity: faqItems.map((item) => ({
-      "@type": "Question",
-      name: item.question,
-      acceptedAnswer: { "@type": "Answer", text: item.answer },
-    })),
-  },
-];
-
 const freeFeatures = [
-  "Account and company mapping",
+  "1 email account with full-history sync",
+  "Full account and company inventory",
   "Mailing-list overview",
-  "Personal-data overview",
-  "Review, whitelist, and correct your data",
-  "Full-history sync",
-  "Breach information",
-  "Personal-data request templates",
-  "Local processing on your computer",
+  "Breach and risk overview",
+  "Personal-data and privacy overview",
+  "Local curation and profile management",
+  "Community support on GitHub",
 ];
-
 const proFeatures = [
   "Everything in Free",
   "Unsubscribe, trash, and mark as spam",
   "Bulk cleanup actions",
   "Send privacy requests and follow-ups",
-  "MCP integration",
+  "Multiple email accounts",
+  "MCP access",
+];
+const faqItems = [
+  {
+    question: "What can I do for free?",
+    answer:
+      "Discover, inspect, and curate your full email history with one account. Free includes your company inventory, mailing lists, breach and risk overview, personal-data findings, and profile management. Pro lets you take cleanup actions, send and follow up on privacy requests, add multiple accounts, and use MCP.",
+  },
+  {
+    question: "Does the Cleanup Pass include all Pro features?",
+    answer:
+      "Yes. One $25 payment gives you full Pro access for 30 days. There is no subscription or renewal.",
+  },
+  {
+    question: "How does annual Pro billing work?",
+    answer:
+      "Paperweight Pro costs $60 per year, equivalent to $5 per month, billed yearly through Polar. Crypto costs $55 for one year of the same Pro access, with manual renewal by contacting us.",
+  },
+  {
+    question: "What happens when my access expires?",
+    answer:
+      "You return to Free. Your local data and profile remain available, and already-connected accounts keep syncing. Cleanup actions, adding another account, and MCP require active Pro access.",
+  },
+  {
+    question: "Can I pay with crypto?",
+    answer:
+      "Yes. Pay $55 for one year of Pro or $25 for a Cleanup Pass using BTC, ETH, XMR, or ZEC. Use the payment instructions, then send your receipt and plan name by email, Signal, or Telegram. Payments are verified manually and licenses are sent through contact, typically within 24 hours. Crypto payments do not create a recurring subscription.",
+  },
+  {
+    question: "Will my existing Lifetime license keep working?",
+    answer:
+      "Yes. Early-supporter Lifetime licenses provide permanent full Pro access. Ending public Lifetime sales does not change existing licenses.",
+  },
 ];
 
 export default function PricingPage() {
+  const lifetimeAvailable = isLifetimeAvailable();
+  const structuredData = [
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      name: SITE_CONFIG.NAME,
+      applicationCategory: "UtilitiesApplication",
+      operatingSystem: "macOS, Windows, Linux",
+      url: `${SITE_CONFIG.URL}/pricing`,
+      description,
+      offers: [
+        ...STANDARD_OFFERS,
+        ...(lifetimeAvailable
+          ? [
+              {
+                "@type": "Offer",
+                name: PLANS.lifetime.name,
+                price: PLANS.lifetime.price,
+                priceCurrency: "USD",
+                url: checkoutUrl("lifetime"),
+                availabilityEnds: "2026-10-08T00:00:00+02:00",
+              },
+            ]
+          : []),
+      ],
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      mainEntity: faqItems.map((item) => ({
+        "@type": "Question",
+        name: item.question,
+        acceptedAnswer: { "@type": "Answer", text: item.answer },
+      })),
+    },
+  ];
   return (
     <>
       <script
         type="application/ld+json"
-        // JSON-LD comes from static constants in this module.
-        // biome-ignore lint/security/noDangerouslySetInnerHtml: Next.js requires raw JSON in a script element.
+        // biome-ignore lint/security/noDangerouslySetInnerHtml: Static product data only.
         dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
       />
-
       <section className="container mx-auto px-4 pt-20 pb-16 text-center">
         <div className="max-w-3xl mx-auto">
           <div className="badge badge-soft badge-primary mb-5">Pricing</div>
-          <h1 className="text-5xl md:text-6xl font-bold mb-6">
-            Start free or buy once
+          <h1 className="text-5xl md:text-6xl font-bold mb-6 text-balance">
+            Start for free or clean up with Paperweight Pro
           </h1>
           <p className="text-xl opacity-80">
-            Discover, inspect, and curate for free. Buy Pro once to unsubscribe,
-            clean up email, send privacy requests, connect multiple accounts,
-            and use MCP integrations.
+            Discover, inspect, and curate your digital footprint for free.
+            Choose a Cleanup Pass for a fresh start, or Pro to stay on top of it
+            all year.
           </p>
         </div>
       </section>
-
       <section className="bg-base-200 py-16">
         <div className="container mx-auto px-4">
-          <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto items-stretch">
-            <div className="card bg-base-100 border-2 border-base-300">
-              <div className="card-body p-8">
-                <div className="text-center mb-4">
-                  <h2 className="text-2xl font-bold mb-2">Free</h2>
-                  <div className="text-4xl font-bold mb-2">$0</div>
-                  <p className="text-sm opacity-70">No expiry</p>
-                </div>
-                <ul className="space-y-3 flex-1 mb-6">
-                  {freeFeatures.map((feature) => (
-                    <li key={feature} className="flex items-start gap-2">
-                      <Check
-                        className="size-5 shrink-0 text-success"
-                        aria-hidden
-                      />
-                      <span>{feature}</span>
-                    </li>
-                  ))}
-                  <li className="flex items-start gap-2">
-                    <Check
-                      className="size-5 shrink-0 text-success"
-                      aria-hidden
-                    />
-                    <strong>One email account</strong>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <Check
-                      className="size-5 shrink-0 text-success"
-                      aria-hidden
-                    />
-                    <span>Community support</span>
-                  </li>
-                </ul>
+          <div className="grid lg:grid-cols-3 gap-x-8 gap-y-6 max-w-6xl mx-auto">
+            <div className="card bg-base-100 border-2 border-base-300 p-8 grid gap-6 lg:row-span-4 lg:grid-rows-subgrid">
+              <div className="space-y-3">
+                <h2 className="text-2xl font-bold">Free</h2>
+                <div className="text-4xl font-bold">$0</div>
+                <p className="text-sm opacity-70">
+                  Discover, inspect, and curate.
+                </p>
+              </div>
+              <FeatureList features={freeFeatures} />
+              <p className="text-sm opacity-70">
+                Free forever. Your full email history.
+              </p>
+              <div className="grid gap-2 content-start">
                 <a href="/#download" className="btn btn-soft btn-block">
                   Download free
                 </a>
+                <p className="min-h-10 flex items-center justify-center text-xs opacity-70">
+                  No payment required.
+                </p>
               </div>
             </div>
-
-            <div className="card bg-base-100 border-2 border-primary">
-              <div className="card-body p-8">
-                <div className="text-center mb-4">
-                  <h2 className="text-2xl font-bold mb-2">Pro lifetime license</h2>
-                  <div className="text-4xl font-bold mb-2">
-                    ${LICENSE_PRICING.LICENSE_PRICE}
+            {(["cleanup", "annual"] as const).map((plan) => (
+              <div
+                key={plan}
+                className={`card bg-base-100 border-2 p-8 grid gap-6 lg:row-span-4 lg:grid-rows-subgrid ${plan === "annual" ? "border-primary" : "border-base-300"}`}
+              >
+                <div className="space-y-3">
+                  <h2 className="text-2xl font-bold">{PLANS[plan].name}</h2>
+                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                    <span className="text-4xl font-bold">
+                      ${PLANS[plan].price}
+                    </span>
+                    <span className="text-base">
+                      {plan === "annual" ? "/ year" : "/ 30 days"}
+                    </span>
                   </div>
                   <p className="text-sm opacity-70">
-                    One-time early supporter price
+                    {plan === "annual"
+                      ? "Maintain your privacy all year."
+                      : "Full Pro for 30 days. No strings attached."}
                   </p>
                 </div>
-                <ul className="space-y-3 flex-1 mb-6">
-                  {proFeatures.map((feature) => (
-                    <li key={feature} className="flex items-start gap-2">
-                      <Check
-                        className="size-5 shrink-0 text-success"
-                        aria-hidden
-                      />
-                      <span>{feature}</span>
-                    </li>
-                  ))}
-                  <li className="flex items-start gap-2">
-                    <Check
-                      className="size-5 shrink-0 text-success"
-                      aria-hidden
-                    />
-                    <strong>Multiple email accounts</strong>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <Check
-                      className="size-5 shrink-0 text-success"
-                      aria-hidden
-                    />
-                    <span>Permanent use of the licensed version</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <Check
-                      className="size-5 shrink-0 text-success"
-                      aria-hidden
-                    />
-                    <span>
-                      Updates through v1 and one year of email support
-                    </span>
-                  </li>
-                </ul>
-                <a
-                  href={SITE_CONFIG.LICENSE_URL}
-                  className="btn btn-primary btn-block"
-                  data-umami-event="Buy License"
-                >
-                  Buy a license
-                </a>
-              </div>
-            </div>
-          </div>
-
-          <div className="card bg-base-100 border border-base-300 max-w-4xl mx-auto mt-6">
-            <div className="card-body flex flex-col gap-3 py-4 px-5 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-4">
-                <Coins
-                  className="size-5 shrink-0 opacity-70 mx-2"
-                  aria-hidden
+                <FeatureList
+                  features={[
+                    ...proFeatures,
+                    plan === "annual"
+                      ? "Email support included"
+                      : "Community support on GitHub",
+                  ]}
                 />
-                <div>
-                  <h2 className="text-lg font-medium">Pay with crypto</h2>
-                  <p className="text-sm opacity-70 mt-2">
-                    Save ${LICENSE_PRICING.LICENSE_PRICE - getCryptoPrice()}{" "}
-                    when you pay with crypto. Choose Bitcoin, Ethereum,
-                    stablecoins, Zcash, Monero, and more.
-                  </p>
+                <p className="text-sm opacity-70">
+                  {plan === "annual"
+                    ? "Save $5 with crypto. Renew manually."
+                    : "One payment. No subscription. No renewal."}
+                </p>
+                <div className="grid gap-2 content-start">
+                  <a
+                    href={checkoutUrl(plan)}
+                    className="btn btn-primary btn-block"
+                    data-umami-event={`Buy ${PLANS[plan].name}`}
+                  >
+                    {plan === "annual"
+                      ? "Get Paperweight Pro"
+                      : "Get Cleanup Pass"}
+                  </a>
+                  <PayWithCryptoButton
+                    pricing={getCryptoPayPricing(plan)}
+                    className="btn btn-outline btn-block"
+                    analyticsEvent={`Pay Crypto ${PLANS[plan].name}`}
+                  >
+                    Pay with crypto (${PLANS[plan].cryptoPrice})
+                  </PayWithCryptoButton>
                 </div>
               </div>
-              <PayWithCryptoButton
-                pricing={getCryptoPayPricing()}
-                className="btn btn-outline btn-accent btn-sm shrink-0 sm:ml-4"
-                analyticsEvent="Pay Crypto"
+            ))}
+          </div>
+          {lifetimeAvailable && (
+            <div className="card bg-base-100 border border-primary/30 max-w-6xl mx-auto mt-8">
+              <div className="card-body p-8">
+                <div className="badge badge-soft badge-primary">
+                  Early supporters
+                </div>
+                <h2 className="card-title">Last chance for Lifetime</h2>
+                <p>
+                  ${PLANS.lifetime.price} once for permanent full Pro access.
+                  Available through October 7, 2026.
+                </p>
+                <p className="text-sm opacity-70">
+                  Save ${PLANS.lifetime.price - PLANS.lifetime.cryptoPrice} with
+                  crypto. Existing Lifetime licenses remain valid forever.
+                </p>
+                <div className="card-actions mt-3">
+                  <a
+                    href={checkoutUrl("lifetime")}
+                    className="btn btn-primary"
+                    data-umami-event="Buy Lifetime"
+                  >
+                    Get Lifetime for ${PLANS.lifetime.price}
+                  </a>
+                  <PayWithCryptoButton
+                    pricing={getCryptoPayPricing("lifetime")}
+                    className="btn btn-outline"
+                    analyticsEvent="Pay Crypto Lifetime"
+                  >
+                    Pay with crypto (${PLANS.lifetime.cryptoPrice})
+                  </PayWithCryptoButton>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
+      <section className="py-16 container mx-auto px-4">
+        <div className="max-w-6xl mx-auto">
+          <h2 className="text-3xl font-bold mb-8 text-center">
+            Which option fits?
+          </h2>
+          <div className="grid md:grid-cols-3 gap-6">
+            <div className="card bg-base-200 border border-base-300">
+              <div className="card-body">
+                <Search className="size-8 text-primary" aria-hidden />
+                <h3 className="card-title">Free</h3>
+                <p>
+                  Map your full history. Review companies, mailing lists,
+                  breaches, and personal data. Get the full picture before you
+                  decide to act.
+                </p>
+              </div>
+            </div>
+            <div className="card bg-base-200 border border-base-300">
+              <div className="card-body">
+                <WandSparkles className="size-8 text-primary" aria-hidden />
+                <h3 className="card-title">Cleanup Pass</h3>
+                <p>
+                  Full Pro for 30 days. Choose it for one focused cleanup, with
+                  one payment and no renewal.
+                </p>
+              </div>
+            </div>
+            <div className="card bg-base-200 border border-base-300">
+              <div className="card-body">
+                <ShieldCheck className="size-8 text-primary" aria-hidden />
+                <h3 className="card-title">Paperweight Pro</h3>
+                <p>
+                  Keep full access all year for ongoing cleanup, privacy-request
+                  tracking, multiple accounts, and MCP. Email support is
+                  included.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section className="bg-base-200 py-12">
+        <div className="max-w-4xl mx-auto px-4">
+          <h2 className="text-3xl font-bold mb-4 text-center">
+            What Pro unlocks
+          </h2>
+          <p className="text-center opacity-80 mb-8">
+            Both paid plans give you the tools to act on what you find.
+          </p>
+          <ul className="grid sm:grid-cols-2 gap-x-8 gap-y-4">
+            {[
+              "Unsubscribe, trash, spam, and privacy requests",
+              "Bulk cleanup actions",
+              "Multiple email accounts",
+              "MCP access",
+              "Ongoing privacy-request tracking",
+              "Email support with yearly Pro",
+            ].map((feature) => (
+              <li key={feature} className="flex items-start gap-2">
+                <Check className="size-5 shrink-0 text-success" aria-hidden />
+                <span>{feature}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="text-sm opacity-70 mt-6 text-center">
+            Free and Cleanup Pass include community support on{" "}
+            <a href={`${SITE_CONFIG.GITHUB_URL}/issues`} className="link">
+              GitHub
+            </a>
+            .
+          </p>
+        </div>
+      </section>
+      <section className="py-16 container mx-auto px-4">
+        <div className="max-w-3xl mx-auto">
+          <h2 className="text-3xl font-bold mb-8 text-center">Pricing FAQ</h2>
+          <div className="space-y-3">
+            {faqItems.map((item) => (
+              <details
+                key={item.question}
+                className="collapse collapse-arrow bg-base-200 border border-base-300"
               >
-                Pay with crypto (${getCryptoPrice()})
-              </PayWithCryptoButton>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="py-16">
-        <div className="container mx-auto px-4">
-          <div className="max-w-4xl mx-auto">
-            <div className="text-center max-w-3xl mx-auto mb-10">
-              <h2 className="text-3xl font-bold mb-3">Which option fits?</h2>
-              <p className="text-lg opacity-80">
-                You can use the free version before you decide to pay.
-              </p>
-            </div>
-            <div className="grid md:grid-cols-2 gap-6">
-              <div className="card bg-base-200 border border-base-300">
-                <div className="card-body">
-                  <Download className="size-8 text-primary" aria-hidden />
-                  <h3 className="card-title">Choose free</h3>
-                  <p className="opacity-80">
-                    Explore the full history of one mailbox. Review companies,
-                    mailing lists, breaches, and personal data. Keep items and
-                    correct your profile for free.
-                  </p>
+                <summary className="collapse-title font-semibold">
+                  {item.question}
+                </summary>
+                <div className="collapse-content text-sm opacity-80">
+                  <p>{item.answer}</p>
                 </div>
-              </div>
-              <div className="card bg-base-200 border border-base-300">
-                <div className="card-body">
-                  <KeyRound className="size-8 text-primary" aria-hidden />
-                  <h3 className="card-title">Buy a license</h3>
-                  <p className="opacity-80">
-                    Pay once to execute cleanup, send privacy requests, connect
-                    multiple mailboxes, and use MCP. There is no recurring subscription.
-                  </p>
-                </div>
-              </div>
-            </div>
+              </details>
+            ))}
           </div>
-        </div>
-      </section>
-
-      <section className="bg-base-200 py-16">
-        <div className="container mx-auto px-4">
-          <div className="max-w-5xl mx-auto">
-            <div className="text-center mb-10">
-              <h2 className="text-3xl font-bold mb-3">
-                What comes with your license
-              </h2>
-              <p className="text-lg opacity-80">
-                Early supporter licenses are available during development. Buy
-                once for permanent use, updates through v1, and one year of
-                email support.
-              </p>
-            </div>
-            <div className="grid md:grid-cols-3 gap-4">
-              <div className="card bg-base-100 border border-base-300">
-                <div className="card-body">
-                  <Laptop className="size-7 text-info" aria-hidden />
-                  <h3 className="font-semibold">Permanent use</h3>
-                  <p className="text-sm opacity-80">
-                    Your license does not expire. Keep using the version you
-                    bought without a subscription or Paperweight-hosted service.
-                  </p>
-                </div>
-              </div>
-              <div className="card bg-base-100 border border-base-300">
-                <div className="card-body">
-                  <RefreshCw className="size-7 text-info" aria-hidden />
-                  <h3 className="font-semibold">Updates through v1</h3>
-                  <p className="text-sm opacity-80">
-                    Use every update released through v1. A future major version
-                    can require a new license.
-                  </p>
-                </div>
-              </div>
-              <div className="card bg-base-100 border border-base-300">
-                <div className="card-body">
-                  <Mail className="size-7 text-info" aria-hidden />
-                  <h3 className="font-semibold">One year of email support</h3>
-                  <p className="text-sm opacity-80">
-                    Get email support for one year after purchase.
-                  </p>
-                </div>
-              </div>
-            </div>
-            <p className="text-sm opacity-70 mt-6 text-center">
-              Polar processes the standard checkout. Paperweight does not store
-              your payment information. Crypto licenses are sent after payment
-              confirmation.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <section className="py-16">
-        <div className="container mx-auto px-4">
-          <div className="max-w-3xl mx-auto">
-            <h2 className="text-3xl font-bold mb-8 text-center">Pricing FAQ</h2>
-            <div className="space-y-3">
-              {faqItems.map((item) => (
-                <details
-                  key={item.question}
-                  className="collapse collapse-arrow bg-base-200 border border-base-300"
-                >
-                  <summary className="collapse-title font-semibold">
-                    {item.question}
-                  </summary>
-                  <div className="collapse-content text-sm opacity-80">
-                    <p>{item.answer}</p>
-                  </div>
-                </details>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="bg-base-300 py-16">
-        <div className="container mx-auto px-4 text-center">
-          <div className="max-w-3xl mx-auto">
-            <h2 className="text-3xl font-bold mb-4">
-              Review your email history
-            </h2>
-            <p className="text-lg opacity-80 mb-8">
-              Download Free to discover and curate your footprint. Buy Pro once
-              for cleanup, privacy requests, multiple accounts, and MCP access.
-            </p>
-            <div className="flex flex-wrap justify-center gap-3">
-              <a
-                href={SITE_CONFIG.LICENSE_URL}
-                className="btn btn-primary"
-                data-umami-event="Buy License"
-              >
-                Buy a license
-              </a>
-              <Link href="/#download" className="btn btn-soft">
-                Download free
-              </Link>
-            </div>
-          </div>
+          <p className="text-sm opacity-70 mt-8">
+            Prices are in USD. Polar processes card payments. Paperweight does
+            not store payment information. Crypto payments are handled manually.
+          </p>
         </div>
       </section>
     </>
+  );
+}
+
+interface FeatureListProps {
+  features: string[];
+}
+function FeatureList({ features }: FeatureListProps) {
+  return (
+    <ul className="space-y-3">
+      {features.map((feature) => (
+        <li key={feature} className="flex items-start gap-2">
+          <Check className="size-5 shrink-0 text-success" aria-hidden />
+          <span>{feature}</span>
+        </li>
+      ))}
+    </ul>
   );
 }

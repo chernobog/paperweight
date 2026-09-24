@@ -1,11 +1,15 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
-import Link from "next/link";
 import { Check, Copy } from "lucide-react";
-import { useCoinPrices, type CoinId, type CoinPrices } from "@/hooks/useCoinPrices";
-import { PAYMENT_ADDRESSES } from "@/utils/payments";
+import Link from "next/link";
+import { type ReactNode, useState } from "react";
+import {
+  type CoinId,
+  type CoinPrices,
+  useCoinPrices,
+} from "@/hooks/useCoinPrices";
 import { SITE_CONFIG } from "@/utils/config";
+import { PAYMENT_ADDRESSES } from "@/utils/payments";
 
 type PaymentCoinId = "ethereum" | "bitcoin" | "zcash" | "monero";
 
@@ -18,8 +22,9 @@ const PAYMENT_COINS: { id: PaymentCoinId; label: string }[] = [
 
 export interface PayWithCryptoPricing {
   priceUsd: number;
-  /** When set, shows an event-week promo footnote in the modal header. */
-  eventLabel?: string;
+  planName: string;
+  duration: string;
+  renewal: string;
 }
 
 interface PayWithCryptoPanelProps {
@@ -81,12 +86,20 @@ function CopyIconButton(props: { value: string; label: string }) {
       onClick={copy}
       aria-label={props.label}
     >
-      {copied ? <Check className="h-3.5 w-3.5 text-primary" /> : <Copy className="h-3.5 w-3.5" />}
+      {copied ? (
+        <Check className="h-3.5 w-3.5 text-primary" />
+      ) : (
+        <Copy className="h-3.5 w-3.5" />
+      )}
     </button>
   );
 }
 
-function CopyField(props: { value: string; displayValue?: string; label: string }) {
+function CopyField(props: {
+  value: string;
+  displayValue?: string;
+  label: string;
+}) {
   const display = props.displayValue ?? props.value;
 
   return (
@@ -99,7 +112,10 @@ function CopyField(props: { value: string; displayValue?: string; label: string 
         aria-label={props.label}
       />
       <div className="absolute right-1.5 top-1/2 -translate-y-1/2">
-        <CopyIconButton value={props.value} label={`Copy ${props.label.toLowerCase()}`} />
+        <CopyIconButton
+          value={props.value}
+          label={`Copy ${props.label.toLowerCase()}`}
+        />
       </div>
     </div>
   );
@@ -164,7 +180,7 @@ function getPaymentContent(
       return {
         description: (
           <>
-            ETH or stablecoins on Ethereum or major L2s. {" "}
+            ETH or stablecoins on Ethereum or major L2s.{" "}
             <a
               href={PAYMENT_ADDRESSES.fluidkeyHostedUrl}
               className="link"
@@ -191,7 +207,9 @@ function getPaymentContent(
         spotPrice: prices?.bitcoin,
         footnote: (
           <div className="space-y-1">
-            <p className="text-sm">No SP1 wallet? Regular Bitcoin address (no privacy guarantees).</p>
+            <p className="text-sm">
+              No SP1 wallet? Regular Bitcoin address (no privacy guarantees).
+            </p>
             <p className="font-mono text-xs text-base-content/60 mt-2">
               {PAYMENT_ADDRESSES.bitcoinRegular}
             </p>
@@ -258,10 +276,7 @@ function PaymentSelector(props: {
         ))}
       </div>
 
-      <div
-        className="mt-3 rounded-lg bg-base-200 p-4"
-        role="tabpanel"
-      >
+      <div className="mt-3 rounded-lg bg-base-200 p-4" role="tabpanel">
         <PaymentPanelContent {...content} />
       </div>
     </div>
@@ -271,30 +286,31 @@ function PaymentSelector(props: {
 export function PayWithCryptoPanel(props: PayWithCryptoPanelProps) {
   const supportEmail = props.supportEmail ?? SITE_CONFIG.CONTACT_EMAIL;
   const { loading, quote, prices } = useCoinPrices();
-  const { priceUsd, eventLabel } = props.pricing;
+  const { priceUsd, planName, duration, renewal } = props.pricing;
 
   return (
     <div className={props.className}>
       {props.showHeader !== false ? (
         <header className="space-y-1">
-          <h2 className="text-xl font-semibold">Pay with crypto</h2>
+          <h2 className="text-xl font-semibold">{planName}: pay with crypto</h2>
           <p className="mt-2">
             Send any equivalent of{" "}
-            <span className="text-primary font-bold">
-              ${priceUsd} USD{eventLabel ? "*" : ""}
-            </span>{" "}
+            <span className="text-primary font-bold">${priceUsd} USD</span>{" "}
             using the rates below or your wallet&apos;s exchange rate.
           </p>
-          {eventLabel ? (
-            <p className="mt-2 text-xs text-base-content/60">
-              *${priceUsd} crypto rate during {eventLabel} only.
-            </p>
-          ) : null}
+          <p className="mt-2 text-sm text-base-content/75">
+            Full Pro access for {duration}. {renewal}
+          </p>
         </header>
       ) : null}
 
       <div className={props.showHeader !== false ? "mt-6" : undefined}>
-        <PaymentSelector priceUsd={priceUsd} loading={loading} quote={quote} prices={prices} />
+        <PaymentSelector
+          priceUsd={priceUsd}
+          loading={loading}
+          quote={quote}
+          prices={prices}
+        />
 
         <a
           href={PAYMENT_ADDRESSES.fluidkeyHostedUrl}
@@ -302,16 +318,20 @@ export function PayWithCryptoPanel(props: PayWithCryptoPanelProps) {
           rel="noopener noreferrer"
           className="mt-4 block rounded-lg border border-dashed border-accent/40 p-4 transition-colors hover:border-accent/70 hover:bg-accent/5"
         >
-          <p className="text-sm font-semibold text-accent">More payment options →</p>
+          <p className="text-sm font-semibold text-accent">
+            More payment options →
+          </p>
           <p className="mt-1 text-xs text-base-content/75">
-            Cross-chain payments from Bitcoin, Solana, Tron, and more via Fluidkey.
+            Cross-chain payments from Bitcoin, Solana, Tron, and more via
+            Fluidkey.
           </p>
         </a>
 
         <div className="mt-6 space-y-2">
           <h3 className="text-sm font-semibold">Paid? Questions?</h3>
           <p className="text-sm text-base-content/80">
-            Once confirmed, send your transaction receipt to <strong>wslyvh.42</strong> (Signal),{" "}
+            Send your transaction receipt and the plan name ({planName}) to{" "}
+            <strong>wslyvh.42</strong> (Signal),{" "}
             <a
               href="https://t.me/wslyvh"
               className="link"
@@ -324,7 +344,8 @@ export function PayWithCryptoPanel(props: PayWithCryptoPanelProps) {
             <Link href={`mailto:${supportEmail}`} className="link">
               {supportEmail}
             </Link>{" "}
-            and we&apos;ll send your license as soon as possible. Typically within 24 hours.
+            and we&apos;ll verify your payment manually and send your license.
+            Typically within 24 hours.
           </p>
         </div>
       </div>

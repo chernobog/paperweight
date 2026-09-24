@@ -242,8 +242,9 @@ export default function Settings(): JSX.Element {
 
   const tierLabel = (status: LicenseStatus): string => {
     if (!status.active) return "Free";
-    if (status.tier === "lifetime") return "Lifetime";
-    if (status.tier === "test") return "Test";
+    if (status.tier === "pro") return "Paperweight Pro";
+    if (status.tier === "cleanup") return "Cleanup Pass";
+    if (status.tier === "lifetime") return "Lifetime Pro";
     return "Licensed";
   };
 
@@ -511,7 +512,7 @@ export default function Settings(): JSX.Element {
                       window.api.openExternal(`${APP_CONFIG.WEBSITE}/pricing`)
                     }
                   >
-                    Buy License
+                    View Pro plans
                   </button>
                 </div>
               )}

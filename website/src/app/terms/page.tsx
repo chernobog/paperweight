@@ -56,16 +56,17 @@ export default async function TermsPage() {
             checkout.
           </li>
           <li>
-            <strong>Lifetime licenses</strong> grant you permanent use of
-            Paperweight and all updates within the current major version (e.g.
-            v1.x). Licenses purchased during beta (v0.x) include a free upgrade
-            to the first major release (v1.x). Future major versions with
-            significant new features may require a new license, with upgrade
-            pricing available to existing license holders.
+            <strong>Paperweight Pro</strong> costs $60 per year, billed yearly.
+            The <strong>Cleanup Pass</strong> costs $25 once for 30 days of full
+            Pro access, with no subscription or renewal. Early-supporter
+            <strong> Lifetime licenses</strong> provide permanent full Pro access
+            and remain valid after public Lifetime sales end.
           </li>
           <li>
-            Payments are processed by Polar.sh - we don't store payment
-            information
+            Card payments are processed by Polar.sh. Crypto payments cost $55
+            for one year of Pro or $25 for a Cleanup Pass. Crypto payments are
+            verified manually, and licenses are sent through contact. Annual
+            crypto access is renewed manually and has no recurring subscription.
           </li>
           <li>
             Refunds are handled case-by-case within 30 days of purchase - email

@@ -1,3 +1,5 @@
+import { checkoutUrl } from "./pricing";
+
 const DOMAIN = "paperweight.email";
 
 export const SITE_CONFIG = {
@@ -13,12 +15,10 @@ export const SITE_CONFIG = {
   UMAMI_SCRIPT: "https://stats.westech.studio/script.js",
   UMAMI_WEBSITE_ID: "2875508a-4c21-4fff-bf74-8043b7d91b74",
   GITHUB_URL: "https://github.com/wslyvh/paperweight",
-  LICENSE_URL:
-    "https://buy.polar.sh/polar_cl_OJu6ndcYoHMB8L1EePkz9dlDytnsloprg8Oh14MCNqW",
+  LICENSE_URL: checkoutUrl("annual"),
 
   PRODUCT_HUNT_URL: "https://www.producthunt.com/products/paperweight",
-  ALTERNATIVETO_URL:
-    "https://alternativeto.net/software/paperweight-email/",
+  ALTERNATIVETO_URL: "https://alternativeto.net/software/paperweight-email/",
   PRIVACY_GUIDES_URL:
     "https://discuss.privacyguides.net/t/paperweight-local-first-open-source-desktop-app-to-cleanup-email-and-manage-your-digital-footprint/37164",
   TWITTER_URL: "https://x.com/wslyvh",
