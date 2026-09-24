@@ -69,6 +69,7 @@ export default function FoundInEmails({
   const [summary, setSummary] = useState<VendorPiiSummary>();
   const [activeTab, setActiveTab] = useState<FindingTab>();
   const [page, setPage] = useState(1);
+  const [open, setOpen] = useState(true);
 
   const loadValues = useCallback(async () => {
     setSummary(await window.api.getVendorPiiSummary(vendorId));
@@ -142,9 +143,15 @@ export default function FoundInEmails({
   if (!summary) {
     return (
       <div className="rounded-box bg-base-200 p-2">
-        <div className="px-4 py-3">
-          <p className="font-semibold">Personal data</p>
-          <p className="text-sm text-base-content/50 mt-1">Loading...</p>
+        <div className="flex items-start gap-3 p-2">
+          <ChevronRight
+            className="w-4 h-4 mt-1 text-base-content/50 shrink-0 rotate-90"
+            strokeWidth={2}
+          />
+          <div>
+            <p className="font-semibold">Personal data</p>
+            <p className="text-sm text-base-content/50 mt-1">Loading...</p>
+          </div>
         </div>
       </div>
     );
@@ -155,9 +162,25 @@ export default function FoundInEmails({
 
   return (
     <div className="rounded-box bg-base-200 p-2">
-      <div className="flex items-start gap-4 px-4 py-3">
+      <div
+        className="flex items-start gap-3 p-2 cursor-pointer"
+        onClick={() => setOpen(!open)}
+      >
+        <ChevronRight
+          className={`w-4 h-4 mt-1 text-base-content/50 shrink-0 transition-transform ${
+            open ? "rotate-90" : ""
+          }`}
+          strokeWidth={2}
+        />
         <div className="grow">
-          <p className="font-semibold">Personal data</p>
+          <p className="font-semibold">
+            Personal data
+            {totalValues > 0 && (
+              <span className="font-normal text-base-content/50">
+                {" "}({values.length})
+              </span>
+            )}
+          </p>
           <p className="text-sm text-base-content/60 mt-1">
             {totalValues > 0 ? (
               <>
@@ -175,13 +198,16 @@ export default function FoundInEmails({
             )}
           </p>
         </div>
-        {totalValues > 0 && (
+        {open && totalValues > 0 && (
           <button
             className="btn btn-sm btn-ghost btn-circle shrink-0"
             title={showValues ? "Hide values" : "Show values"}
             aria-label={showValues ? "Hide values" : "Show values"}
             disabled={busy}
-            onClick={toggleReveal}
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleReveal();
+            }}
           >
             {showValues ? (
               <Eye className="w-4 h-4" />
@@ -194,99 +220,101 @@ export default function FoundInEmails({
 
       {error && <p className="text-sm text-error px-4 pb-3">{error}</p>}
 
-      <div>
-        {totalValues > 0 && (
-          <div className="flex items-center px-1">
-            <div
-              role="tablist"
-              aria-label="Finding status and confidence"
-              className="tabs tabs-md flex gap-1"
-            >
-              {CONFIDENCE_OPTIONS.map((tab) => {
-                const count = valuesByConfidence[tab.id].length;
-                const disabled = count === 0;
-                const active = !disabled && currentTab === tab.id;
-
-                return (
-                  <button
-                    key={tab.id}
-                    role="tab"
-                    aria-selected={active}
-                    title={tab.title}
-                    disabled={disabled}
-                    className={`tab rounded-lg transition-colors ${
-                      active
-                        ? "tab-active bg-base-100 shadow-sm"
-                        : "text-base-content/50 hover:bg-base-100/50 hover:text-base-content/80"
-                    }`}
-                    onClick={() => {
-                      setActiveTab(tab.id);
-                      setPage(1);
-                    }}
-                  >
-                    {tab.label}
-                    {count > 0 ? ` (${count})` : ""}
-                  </button>
-                );
-              })}
-              <button
-                role="tab"
-                aria-selected={currentTab === "suppressed"}
-                title="Values you marked as not yours"
-                disabled={suppressedValues.length === 0}
-                className={`tab rounded-lg transition-colors ${
-                  currentTab === "suppressed"
-                    ? "tab-active bg-base-100 shadow-sm"
-                    : "text-base-content/50 hover:bg-base-100/50 hover:text-base-content/80"
-                }`}
-                onClick={() => {
-                  setActiveTab("suppressed");
-                  setPage(1);
-                }}
+      {open && (
+        <div>
+          {totalValues > 0 && (
+            <div className="flex items-center px-1">
+              <div
+                role="tablist"
+                aria-label="Finding status and confidence"
+                className="tabs tabs-md flex gap-1"
               >
-                Not mine
-                {suppressedValues.length > 0
-                  ? ` (${suppressedValues.length})`
-                  : ""}
-              </button>
+                {CONFIDENCE_OPTIONS.map((tab) => {
+                  const count = valuesByConfidence[tab.id].length;
+                  const disabled = count === 0;
+                  const active = !disabled && currentTab === tab.id;
+  
+                  return (
+                    <button
+                      key={tab.id}
+                      role="tab"
+                      aria-selected={active}
+                      title={tab.title}
+                      disabled={disabled}
+                      className={`tab rounded-lg transition-colors ${
+                        active
+                          ? "tab-active bg-base-100 shadow-sm"
+                          : "text-base-content/50 hover:bg-base-100/50 hover:text-base-content/80"
+                      }`}
+                      onClick={() => {
+                        setActiveTab(tab.id);
+                        setPage(1);
+                      }}
+                    >
+                      {tab.label}
+                      {count > 0 ? ` (${count})` : ""}
+                    </button>
+                  );
+                })}
+                <button
+                  role="tab"
+                  aria-selected={currentTab === "suppressed"}
+                  title="Values you marked as not yours"
+                  disabled={suppressedValues.length === 0}
+                  className={`tab rounded-lg transition-colors ${
+                    currentTab === "suppressed"
+                      ? "tab-active bg-base-100 shadow-sm"
+                      : "text-base-content/50 hover:bg-base-100/50 hover:text-base-content/80"
+                  }`}
+                  onClick={() => {
+                    setActiveTab("suppressed");
+                    setPage(1);
+                  }}
+                >
+                  Not mine
+                  {suppressedValues.length > 0
+                    ? ` (${suppressedValues.length})`
+                    : ""}
+                </button>
+              </div>
+              <div className="ml-auto">
+                <FindingPagination
+                  page={page}
+                  totalPages={totalPages}
+                  onPageChange={setPage}
+                />
+              </div>
             </div>
-            <div className="ml-auto">
-              <FindingPagination
-                page={page}
-                totalPages={totalPages}
-                onPageChange={setPage}
+          )}
+  
+          <div className="mt-2">
+            {pageValues.length === 0 ? (
+              <p className="text-sm text-base-content/50 px-4 py-2">No data found.</p>
+            ) : (
+              <PiiValueList
+                values={pageValues}
+                revealed={revealed}
+                busy={busy}
+                mode={currentTab === "suppressed" ? "suppressed" : "active"}
+                onConfirm={confirmValues}
+                onSuppress={
+                  currentTab === "suppressed" ? undefined : suppressValues
+                }
               />
-            </div>
+            )}
+  
+            {totalPages > 1 && (
+              <div className="flex justify-end pt-2">
+                <FindingPagination
+                  page={page}
+                  totalPages={totalPages}
+                  onPageChange={setPage}
+                />
+              </div>
+            )}
           </div>
-        )}
-
-        <div className="mt-2">
-          {pageValues.length === 0 ? (
-            <p className="text-sm text-base-content/50 px-4 py-2">No data found.</p>
-          ) : (
-            <PiiValueList
-              values={pageValues}
-              revealed={revealed}
-              busy={busy}
-              mode={currentTab === "suppressed" ? "suppressed" : "active"}
-              onConfirm={confirmValues}
-              onSuppress={
-                currentTab === "suppressed" ? undefined : suppressValues
-              }
-            />
-          )}
-
-          {totalPages > 1 && (
-            <div className="flex justify-end pt-2">
-              <FindingPagination
-                page={page}
-                totalPages={totalPages}
-                onPageChange={setPage}
-              />
-            </div>
-          )}
         </div>
-      </div>
+      )}
     </div>
   );
 }
