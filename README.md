@@ -42,9 +42,12 @@ IMAP Presets: Proton, Yahoo Mail, Fastmail, Yandex, Zoho, Mailbox.org, Posteo, G
 Discover, inspect, and curate your digital footprint for free. Upgrade to Pro to execute cleanup and support open-source development.
 
 - **Free**: One email account, full-history sync, account and mailing-list discovery, breach and personal-data overviews, and local curation
-- **Pro perpetual license**: Everything in Free, plus multiple email accounts, unsubscribe, trash, spam, bulk cleanup, privacy requests, and MCP access
+- **Cleanup Pass**: Full Pro access for 30 days of focused cleanup. One payment, no renewal. Community support on GitHub.
+- **Paperweight Pro**: Maintain your privacy all year, with email support included.
 
-[Buy a perpetual license and support development →](https://www.paperweight.email/#pricing)
+Both paid plans unlock unsubscribe, trash, spam, bulk cleanup actions, privacy requests and follow-ups, multiple email accounts, and MCP access. Card and manual crypto payments are available for both plans.
+
+[View plans and pricing →](https://www.paperweight.email/pricing)
 
 ## Development
 

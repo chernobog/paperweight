@@ -17,6 +17,12 @@ it("keeps Lifetime public through October 7 Amsterdam time, then removes it", ()
 });
 
 it("sends each selected plan directly to its product checkout", () => {
+  for (const plan of ["annual", "cleanup", "lifetime"] as const) {
+    const url = new URL(checkoutUrl(plan));
+    expect(`${url.origin}${url.pathname}`).toBe(
+      "https://buy.polar.sh/polar_cl_Xw4DvPpmzCehGjZMTlePIVE8UxO63FGtfw1bR3FnaxG",
+    );
+  }
   expect(new URL(checkoutUrl("annual")).searchParams.get("product_id")).toBe(
     "0c74b8ca-6492-42c9-867f-659617203246",
   );

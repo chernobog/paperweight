@@ -173,9 +173,9 @@ it.each(["pro", "cleanup", "lifetime", "annual", "test"])("activates an explicit
 });
 
 
-it("accepts non-expiring Pro responses used by subscriptions and private Testing licenses", async () => {
+it("accepts non-expiring Pro responses used by subscriptions", async () => {
   mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ valid: true, tier: "pro" }) });
-  await expect(activateLicense("PRIVATE-TESTING")).resolves.toMatchObject({ active: true, tier: "pro" });
+  await expect(activateLicense("SUBSCRIPTION")).resolves.toMatchObject({ active: true, tier: "pro" });
   expect(getLicenseStatus().expiresAt).toBeUndefined();
 });
 

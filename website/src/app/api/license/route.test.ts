@@ -42,7 +42,6 @@ it.each([
   [annual, "pro", null],
   [cleanup, "cleanup", "2026-10-30T12:00:00Z"],
   [lifetime, "lifetime", null],
-  [testing, "pro", null],
   [testing, "pro", "2026-10-01T12:00:00Z"],
 ])("grants Pro for the recognized benefit %s", async (benefit, tier, expiresAt) => {
   const result = await validate({
@@ -54,7 +53,10 @@ it.each([
   expect(result.expiresAt).toBe(expiresAt ?? undefined);
 });
 
-it("requires an expiry for the one-time Cleanup Pass", async () => {
+it.each([
+  cleanup,
+  testing,
+])("requires an expiry for fixed-duration benefit %s", async (benefit) => {
   for (const expiry of [
     undefined,
     null,
@@ -65,7 +67,7 @@ it("requires an expiry for the one-time Cleanup Pass", async () => {
   ]) {
     const result = await validate({
       status: "granted",
-      benefit_id: cleanup,
+      benefit_id: benefit,
       expires_at: expiry,
     });
     expect(result.valid).toBe(false);

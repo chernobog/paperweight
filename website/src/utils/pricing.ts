@@ -1,5 +1,5 @@
 const CHECKOUT_URL =
-  "https://polar.sh/checkout/polar_c_TeFn9VeBGNbi2ZLaL94v3vxTHi9Vo7vKcpBIb3eoYan";
+  "https://buy.polar.sh/polar_cl_Xw4DvPpmzCehGjZMTlePIVE8UxO63FGtfw1bR3FnaxG";
 
 export const PLANS = {
   annual: {

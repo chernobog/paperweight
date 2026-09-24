@@ -25,7 +25,7 @@ const LICENSE_BENEFITS: Record<string, LicenseBenefit> = {
   },
   "be8f9c70-8a07-4e51-9d56-932e52bd9631": {
     tier: "pro",
-    requiresExpiry: false,
+    requiresExpiry: true,
   },
 };
 
