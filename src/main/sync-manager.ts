@@ -162,7 +162,6 @@ function startWorker(key: string, mode: WorkerMode): boolean {
   const breachesDbPath = is.dev
     ? join(app.getAppPath(), "resources", "breaches.db")
     : join(process.resourcesPath, "breaches.db");
-
   if (mode === "sync") {
     syncLog.info(
       `[${accountTag(key)}] Refresh starting`,

@@ -1,23 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import makeBlockie from "ethereum-blockies-base64";
-import { HelpCircle, Lock, Moon, Sun } from "lucide-react";
+import { HelpCircle, Moon, Sun } from "lucide-react";
 import {
   type AccountInfo,
   type AgentAccess,
   type EmailConnection,
-  type LicenseStatus,
   type McpSetup,
   type WhitelistEntry,
 } from "@shared/types";
 import { APP_CONFIG } from "@shared/config";
 import { formatBytes } from "@shared/formatting";
-import {
-  useLicense,
-  useRefreshLicense,
-  useActionAccess,
-  PRO_UPGRADE_BODY,
-} from "../context/LicenseContext";
+import { useActionAccess } from "../context/LicenseContext";
 import {
   ProviderSelect,
   GmailConnect,
@@ -40,6 +34,7 @@ type AddAccountView = "provider" | "gmail" | "microsoft" | "apple" | "proton" | 
 export default function Settings(): JSX.Element {
   const navigate = useNavigate();
   const location = useLocation();
+  const allowAction = useActionAccess();
   const [account, setAccount] = useState<AccountInfo>();
   const [showServerSettings, setShowServerSettings] = useState(false);
   const [connection, setConnection] = useState<EmailConnection | null>(null);
@@ -57,12 +52,6 @@ export default function Settings(): JSX.Element {
   const [mcpSetup, setMcpSetup] = useState<McpSetup>();
   const [mcpConfigCopied, setMcpConfigCopied] = useState(false);
   const [showResyncModal, setShowResyncModal] = useState(false);
-  const [licenseKey, setLicenseKey] = useState("");
-  const license = useLicense();
-  const allowAction = useActionAccess();
-  const refreshLicense = useRefreshLicense();
-  const [licenseLoading, setLicenseLoading] = useState(false);
-  const [licenseError, setLicenseError] = useState("");
   const [showWipeModal, setShowWipeModal] = useState(false);
   const [wipeInProgress, setWipeInProgress] = useState(false);
   const [deletionError, setDeletionError] = useState("");
@@ -140,32 +129,6 @@ export default function Settings(): JSX.Element {
     fetchWhitelist();
   };
 
-  const handleActivateLicense = async (): Promise<void> => {
-    const key = licenseKey.trim();
-    if (!key) return;
-    setLicenseLoading(true);
-    setLicenseError("");
-    try {
-      const status = await window.api.activateLicense(key);
-      await refreshLicense();
-      if (!status.active) {
-        setLicenseError("Invalid or expired license key.");
-      } else {
-        setLicenseKey("");
-      }
-    } catch (err) {
-      setLicenseError(err instanceof Error ? err.message : "Activation failed");
-    } finally {
-      setLicenseLoading(false);
-    }
-  };
-
-  const handleDeactivateLicense = async (): Promise<void> => {
-    await window.api.deactivateLicense();
-    await refreshLicense();
-    refreshAccounts();
-  };
-
   const handleResync = async (): Promise<void> => {
     if (!allowAction("curate")) return;
     await window.api.resyncData();
@@ -199,12 +162,7 @@ export default function Settings(): JSX.Element {
     }
   };
 
-  const handleAddAccount = async (): Promise<void> => {
-    const result = await window.api.addAccount();
-    if (result?.blocked && result.reason === "license_required") {
-      licenseSectionRef.current?.scrollIntoView({ behavior: "smooth" });
-      return;
-    }
+  const handleAddAccount = (): void => {
     setAddAccountView("provider");
     setShowAddAccountModal(true);
   };
@@ -238,14 +196,6 @@ export default function Settings(): JSX.Element {
       hour: "numeric",
       minute: "2-digit",
     });
-  };
-
-  const tierLabel = (status: LicenseStatus): string => {
-    if (!status.active) return "Free";
-    if (status.tier === "pro") return "Paperweight Pro";
-    if (status.tier === "cleanup") return "Cleanup Pass";
-    if (status.tier === "lifetime") return "Lifetime Pro";
-    return "Licensed";
   };
 
   const connectionHealthy = !!connection;
@@ -290,7 +240,6 @@ export default function Settings(): JSX.Element {
   };
 
   const actionBusy = switchingEmail !== null || removeInProgress;
-  const needsLicense = !license.active && accounts.length >= 1;
 
   return (
     <div className="space-y-6 max-w-xl">
@@ -403,17 +352,11 @@ export default function Settings(): JSX.Element {
 
           <div className="flex items-center gap-3 pt-1">
             <button
-              className={`btn btn-sm w-fit ${needsLicense ? "btn-ghost" : "btn-primary"}`}
+              className="btn btn-sm btn-primary w-fit"
               onClick={handleAddAccount}
             >
-              {needsLicense && <Lock className="w-3.5 h-3.5" />}
               Add account
             </button>
-            {needsLicense && (
-              <span className="text-xs text-base-content/50">
-                Requires Pro
-              </span>
-            )}
             <button
               type="button"
               className="btn btn-link btn-sm px-0"
@@ -426,98 +369,13 @@ export default function Settings(): JSX.Element {
       </div>
 
       {/* Section 2: License */}
-      <div id="license" ref={licenseSectionRef} className="card bg-base-200">
-        <div className="card-body space-y-4">
-          <h3 className="font-semibold">
-            {license.active ? "License" : "Upgrade to Pro"}
-          </h3>
-
-          {account && (
-            <>
-              {license.active ? (
-                <div className="space-y-2">
-                  <div className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-sm">
-                    <span className="text-base-content/50">Type</span>
-                    <span>{tierLabel(license)}</span>
-
-                    <span className="text-base-content/50">Key</span>
-                    <span className="font-mono">
-                      {license.key
-                        ? `XXXX-XXXX-${license.key.slice(-4)}`
-                        : ""}
-                    </span>
-
-                    {license.expiresAt && (
-                      <>
-                        <span className="text-base-content/50">Expires</span>
-                        <span>
-                          {new Date(license.expiresAt).toLocaleDateString()}
-                        </span>
-                      </>
-                    )}
-                  </div>
-                  <div className="flex gap-2 pt-1">
-                    <button
-                      className="btn btn-primary btn-sm"
-                      onClick={() =>
-                        window.api.openExternal(
-                          license.portalUrl || "https://paperweight.email",
-                        )
-                      }
-                    >
-                      Manage
-                    </button>
-                    <button
-                      className="btn btn-ghost btn-sm"
-                      onClick={handleDeactivateLicense}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <p className="text-sm text-base-content/60">
-                    {PRO_UPGRADE_BODY}
-                  </p>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      className="input input-bordered input-sm flex-1"
-                      placeholder="License key"
-                      value={licenseKey}
-                      onChange={(e) => setLicenseKey(e.target.value)}
-                      onKeyDown={(e) =>
-                        e.key === "Enter" && handleActivateLicense()
-                      }
-                    />
-                    <button
-                      className="btn btn-primary btn-sm"
-                      disabled={licenseLoading || !licenseKey.trim()}
-                      onClick={handleActivateLicense}
-                    >
-                      {licenseLoading ? (
-                        <span className="loading loading-spinner loading-xs" />
-                      ) : (
-                        "Activate"
-                      )}
-                    </button>
-                  </div>
-                  {licenseError && (
-                    <p className="text-xs text-error">{licenseError}</p>
-                  )}
-                  <button
-                    className="btn btn-primary btn-sm w-fit"
-                    onClick={() =>
-                      window.api.openExternal(`${APP_CONFIG.WEBSITE}/pricing`)
-                    }
-                  >
-                    View Pro plans
-                  </button>
-                </div>
-              )}
-            </>
-          )}
+      <div className="card bg-base-200">
+        <div className="card-body space-y-3">
+          <h3 className="font-semibold">License</h3>
+          <div className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-sm">
+            <span className="text-base-content/50">Status</span>
+            <span className="text-success font-medium">Active (Perpetual / Unrestricted)</span>
+          </div>
         </div>
       </div>
 

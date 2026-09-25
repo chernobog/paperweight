@@ -137,19 +137,7 @@ export function registerAccountHandlers(): void {
   handle(IPC.getEmailConnection, () => getEmailConnection());
 
   // --- Multi-account management ---
-
-  // Pre-flight license check before the renderer starts an OAuth flow.
-  // Intentionally two-step: this returns immediately so the renderer can show
-  // the license modal inline, then the actual auth IPC (startGmailAuth etc.)
-  // is called separately once the user is cleared to proceed.
   handle(IPC.addAccount, () => {
-    const existing = listAccounts();
-    if (existing.length >= 1) {
-      const license = getLicenseStatus();
-      if (!license.active) {
-        return { blocked: true, reason: "license_required" };
-      }
-    }
     return null;
   });
 

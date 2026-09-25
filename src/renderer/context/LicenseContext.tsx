@@ -29,7 +29,7 @@ const LicenseContext = createContext<LicenseContextValue | null>(null);
 
 export function useLicense(): LicenseStatus {
   const ctx = useContext(LicenseContext);
-  return ctx?.license ?? { active: false };
+  return ctx?.license ?? { active: true, tier: "lifetime" };
 }
 
 export function useActionAccess() {
