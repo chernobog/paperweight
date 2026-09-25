@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import makeBlockie from "ethereum-blockies-base64";
-import { HelpCircle, Moon, Sun } from "lucide-react";
+import { HelpCircle, Lock, Moon, Sun } from "lucide-react";
 import {
   type AccountInfo,
   type AgentAccess,
@@ -9,7 +9,6 @@ import {
   type McpSetup,
   type WhitelistEntry,
 } from "@shared/types";
-import { APP_CONFIG } from "@shared/config";
 import { formatBytes } from "@shared/formatting";
 import { useActionAccess } from "../context/LicenseContext";
 import {
@@ -369,7 +368,7 @@ export default function Settings(): JSX.Element {
       </div>
 
       {/* Section 2: License */}
-      <div className="card bg-base-200">
+      <div id="license" ref={licenseSectionRef} className="card bg-base-200">
         <div className="card-body space-y-3">
           <h3 className="font-semibold">License</h3>
           <div className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-sm">
@@ -479,7 +478,7 @@ export default function Settings(): JSX.Element {
         <div className="card-body space-y-3">
           <h3 className="font-semibold">AI Agent access (experimental)</h3>
           <p className="text-sm text-base-content/60">
-            MCP access requires Pro. Choose what connected agents can do with Paperweight.
+            Choose what connected agents can do with Paperweight.
           </p>
 
           <div
@@ -519,8 +518,8 @@ export default function Settings(): JSX.Element {
               }}
             >
               <option value="off">Off</option>
-              <option value="read" disabled={!license.active}>Read only</option>
-              <option value="actions" disabled={!license.active}>Read &amp; write</option>
+              <option value="read">Read only</option>
+              <option value="actions">Read &amp; write</option>
             </select>
           </label>
           {agentAccess === "actions" ? (

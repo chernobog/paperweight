@@ -1,7 +1,6 @@
 import { join } from "path";
 import { writeFileSync, readFileSync, unlinkSync, mkdirSync, existsSync } from "fs";
 import { getDb } from "../db";
-import { APP_CONFIG } from "@shared/config";
 import type { LicenseTier, LicenseStatus, McpSetup, WhitelistEntry } from "@shared/types";
 import { licenseLog } from "../utils/log";
 
@@ -130,9 +129,6 @@ export function getMcpSetup(): McpSetup {
 // Read old cached licenses and responses without exposing legacy deal labels.
 type StoredLicenseTier = LicenseTier | "annual" | "test";
 
-function normalizeLicenseTier(tier: StoredLicenseTier): LicenseTier {
-  return tier === "annual" || tier === "test" ? "pro" : tier;
-}
 
 interface LicenseInfo {
   key: string;
